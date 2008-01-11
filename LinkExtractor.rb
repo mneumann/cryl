@@ -9,9 +9,16 @@ class LinkExtractor
   require 'hpricot'
   require 'uri'
   require 'cgi'
+  require 'set'
 
-  def self.each(html, doc_host, doc_port, doc_path)
+  def self.extract(html, doc_host, doc_port, doc_path, &block)
     doc_host = doc_host.downcase
+    doc_dir = doc_path[0..doc_path.rindex('/')]
+
+    if block.nil?
+      block = proc { true }
+    end
+    link_set = Set.new
 
     Hpricot.scan(html) do |type, name, attrs, str|
       case type
@@ -51,7 +58,7 @@ class LinkExtractor
 
             if path.nil? or path.empty? or path !~ /^\//
               # relative path
-              path = doc_path + (path || "")
+              path = doc_dir + (path || "")
             else
               # absolute path
               path = path || "/" 
@@ -78,7 +85,8 @@ class LinkExtractor
               end
             end
 
-            yield host, port, path, query
+            link = [host, port, path, query]
+            link_set.add(link) if block.call(link)
           end
 =begin
         when /^base$/i
@@ -90,12 +98,15 @@ class LinkExtractor
         end
       end
     end
+    return link_set
   end
 end
 
 if __FILE__ == $0
   body = File.read('/tmp/test.html')
-  LinkExtractor.each(body, 'ntecs.de', 80, "/abc") do |host, port, path, query|
-    p host, port, path, query
-  end
+  p LinkExtractor.extract(body, 'ntecs.de', 80, "/abc") 
+  #{|host, port, path, query|
+  #  p host, port, path, query
+  #  true
+  #}
 end
