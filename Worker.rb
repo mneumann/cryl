@@ -4,17 +4,11 @@ class Worker
   require 'set'
   require 'digest/sha1'
   require 'fileutils'
+  require 'yaml'
 
   def initialize(pid, master, storage_dir)
-    @pid, @master = pid, master
-    @storage_dir = storage_dir
+    @pid, @master, @storage_dir = pid, master, storage_dir
   end
-
-  # TODO: read from domain_entry
-  OPTS = {
-    :valid_content_types => [ /text\// ],
-    :timeout => 3
-  }
 
   def work
     done = Hash.new
@@ -29,28 +23,33 @@ class Worker
 
       url = row['url']
       link = from_url(row['url'])
-      domain_entry = @master.get_domain_entry_by_id(row['domain_entry_id'])
-      same_domain_pattern = Regexp.new(domain_entry['same_domain_pattern'])
+      domain = @master.get_domain_by_id(row['domain_id'])
+      prefs = YAML.load(domain['prefs'])
 
       log "crawling: #{ url }"
 
-      err, ctype, body = Fetcher.fetch(link[0], link[1], link[2], link[3], OPTS)
+      err, ctype, body = Fetcher.fetch(link[0], link[1], link[2], link[3], prefs)
 
       if err == :ok
         # store
         store(url, body)
       else
-        p err
+        log "ERROR(fetch): #{err}"
         done[url] = "FAILED: #{err}" 
         next
       end
 
       # we have reached the maximum depth!
       if row['depth'] <= 0 
-        p "depth reached"
+        log "NOTE: depth reached"
         done[url] = "OK: depth reached"
         next
       end
+
+      #
+      # Extract links
+      #
+      same_domain_pattern = prefs[:same_domain_pattern] || //
 
       link_set = LinkExtractor.extract(body, link[0], link[1], link[2]) {|host, port, _, _|
         host =~ same_domain_pattern and port == 80
@@ -59,7 +58,7 @@ class Worker
       urls = []
       link_set.each {|host, port, path, query| urls << to_url(host, port, path, query) }
 
-      @master.add_urls(urls, row['depth'].to_i - 1, domain_entry['id'])
+      @master.add_urls(urls, row['depth'] - 1, domain['id'])
 
       done[url] =  "OK"
 
@@ -82,14 +81,15 @@ class Worker
     path = url_to_path(url)
     FileUtils.mkdir_p(File.dirname(path))
     File.open(path, 'w+') {|f|
-      f.puts "# url: #{url.inspect}, ts: #{Time.now.to_i}" 
+      f.puts "# url: http://#{url}\tts: #{Time.now.to_i}" 
       f.write body
     }
   end
 
   def url_to_path(url)
-    arr = Digest::SHA1.hexdigest(url).scan(/../)
-    File.join(@storage_dir, arr.shift, arr.shift, arr.join(""))
+    #arr = Digest::SHA1.hexdigest(url).scan(/../)
+    #File.join(@storage_dir, arr.shift, arr.shift, arr.join(""))
+    File.join(@storage_dir, Digest::SHA1.hexdigest(url))
   end
 
   def log(str)
@@ -106,5 +106,4 @@ class Worker
   def to_url(host, port, path, query=nil)
     host + path + (query ? "?" + query : "")  
   end
-
 end

@@ -2,16 +2,22 @@ require 'rubygems'
 require 'Master'
 require 'Worker'
 
-master = Master.new('/tmp/real_test_master.db', 10)
-id = master.add_domain_entry('ntecs.de', '(^|[.])ntecs[.]de$', 5) 
-p id
-p master.add_urls(['www.ntecs.de/'], 5, id)
+PACKET_SIZE = 10
 
-#id = master.add_domain_entry('heise.de', '(^|[.])heise[.]de$', 100) 
-id = master.add_domain_entry('heise.de', '', 100) 
-p id
-p master.add_urls(['www.heise.de/'], 100, id)
+master = Master.new('master.db', PACKET_SIZE)
 
+master.add('www.ntecs.de', 
+           :same_domain_pattern => /(^|[.])ntecs[.]de$/,
+           :timeout => 5,
+           :valid_content_types => [/text\//],
+           :max_depth => 5)
+
+master.add('www.heise.de',
+           :same_domain_pattern => /(^|[.])heise[.]de$/,
+           :timeout => 3,
+           :valid_content_types => [/text\/html/],
+           :max_depth => 10,
+           :start_url => 'www.heise.de/')
 
 
 threads = []
