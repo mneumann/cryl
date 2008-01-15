@@ -15,7 +15,7 @@ p master.add_urls(['www.heise.de/'], 100, id)
 
 
 threads = []
-10.times do |t|
-  threads << Thread.new { Worker.new("p#{t}", master).run }
+5.times do |t|
+  threads << Thread.new { Worker.new("p#{t}", master, './work').run }
 end
 threads.each do |t| t.join end

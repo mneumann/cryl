@@ -2,9 +2,12 @@ class Worker
   require 'Fetcher'
   require 'LinkExtractor'
   require 'set'
+  require 'digest/sha1'
+  require 'fileutils'
 
-  def initialize(pid, master)
+  def initialize(pid, master, storage_dir)
     @pid, @master = pid, master
+    @storage_dir = storage_dir
   end
 
   # TODO: read from domain_entry
@@ -17,10 +20,7 @@ class Worker
     done = Hash.new
 
     packet = @master.acquire_work_packet(@pid)
-    if packet.empty?
-      p "empty!"
-      sleep 1
-    end
+    sleep 5 if packet.empty?
 
     packet.each do |row|
 
@@ -36,9 +36,10 @@ class Worker
 
       err, ctype, body = Fetcher.fetch(link[0], link[1], link[2], link[3], OPTS)
 
-      # TODO compress and store if err == :ok
-
-      if err != :ok
+      if err == :ok
+        # store
+        store(url, body)
+      else
         p err
         done[url] = "FAILED: #{err}" 
         next
@@ -75,11 +76,25 @@ class Worker
     end
   end
 
+  protected
+
+  def store(url, body)
+    path = url_to_path(url)
+    FileUtils.mkdir_p(File.dirname(path))
+    File.open(path, 'w+') {|f|
+      f.puts "# url: #{url.inspect}, ts: #{Time.now.to_i}" 
+      f.write body
+    }
+  end
+
+  def url_to_path(url)
+    arr = Digest::SHA1.hexdigest(url).scan(/../)
+    File.join(@storage_dir, arr.shift, arr.shift, arr.join(""))
+  end
+
   def log(str)
     puts str
   end
-
-  protected
 
   def from_url(url)
     sep = url.index("/")
