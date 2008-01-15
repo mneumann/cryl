@@ -5,10 +5,9 @@ class Master
   require 'sqlite3'
   require 'thread'
 
-  PACKET_SIZE = 20
   SCHEMA_VERSION = 1
 
-  def initialize(db_file)
+  def initialize(db_file, packet_size)
     @db_mutex = Mutex.new
     @db = SQLite3::Database.new(db_file)
     @db.results_as_hash = true
@@ -26,7 +25,7 @@ class Master
       SELECT url, depth, domain_entry_id FROM fetches
       WHERE processed_by IS NULL
       ORDER BY step
-      LIMIT #{PACKET_SIZE}
+      LIMIT #{packet_size}
     }
     @stmt_acquire_packet = @db.prepare %{ 
       UPDATE fetches SET processed_by = ?, acquired_at = ?
@@ -46,7 +45,7 @@ class Master
       next_step = db.get_first_value(@sql_next_step, domain_entry_id)
 
       urls.each do |url|
-        if db.get_first_value(@sql_count_url, url) == 0
+        if db.get_first_value(@sql_count_url, url).to_i == 0
           @stmt_insert_fetches.execute!(url, depth, domain_entry_id, next_step + cnt)
           cnt += 1
         end
@@ -57,20 +56,25 @@ class Master
     cnt
   end
 
-  def add_work_packet()
-    #'url1' => depth
-  end
-
-  def add_domain_entry(domain)
+  def add_domain_entry(domain, same_domain_pattern, crawl_depth)
     with_db do |db|
-      db.execute('INSERT OR IGNORE INTO domain_entry (domain) VALUES (?)', domain)
+      db.execute(%{
+        INSERT OR IGNORE INTO domain_entry (domain, same_domain_pattern, crawl_depth) 
+        VALUES (?, ?, ?)
+        }, domain, same_domain_pattern, crawl_depth)
       db.get_first_value('SELECT id FROM domain_entry WHERE domain = ?', domain)
     end
   end
 
-  def get_domain_entry(id)
+  def get_domain_entry_by_id(id)
     with_db do |db|
       db.get_first_row('SELECT * FROM domain_entry WHERE id = ?', id)
+    end
+  end
+
+  def get_domain_entry_by_domain(domain)
+    with_db do |db|
+      db.get_first_row('SELECT * FROM domain_entry WHERE domain = ?', domain)
     end
   end
 
@@ -83,7 +87,7 @@ class Master
     with_db do
       @stmt_find_packet.execute!().each do |row|
         @stmt_acquire_packet.execute!(pid, Time.now, row['url'])
-        urls << row #urls[row['url']] = row['depth']
+        urls << row 
       end
     end
 
@@ -154,6 +158,8 @@ class Master
       CREATE TABLE domain_entry (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         domain VARCHAR(100) UNIQUE NOT NULL,
+        same_domain_pattern VARCHAR(100) NOT NULL,
+        crawl_depth INTEGER NOT NULL DEFAULT 1,
         next_step INTEGER NOT NULL DEFAULT 0
       );
     }
