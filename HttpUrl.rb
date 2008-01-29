@@ -120,6 +120,15 @@ class HttpUrl
     nil
   end
 
+  def pathquery 
+    str = "#{@path}"
+    if @query
+      str << "?"
+      str << @query
+    end
+    str
+  end
+
   def to_filename
     a = @host.split(".").reverse.map {|s| s.gsub!(/[^A-Za-z0-9_-]*/, '') }
     a << Digest::SHA1.hexdigest(self.to_s)
@@ -131,12 +140,7 @@ class HttpUrl
   end
 
   def to_s
-    str = "http://#{@host}:#{@port}#{@path}"
-    if @query
-      str << "?"
-      str << @query
-    end
-    str
+    "http://#{@host}:#{@port}#{pathquery()}"
   end
 
   def ==(o)
