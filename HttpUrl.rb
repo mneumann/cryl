@@ -137,4 +137,9 @@ class HttpUrl
     end
     str
   end
+
+  def ==(o)
+    return false unless o.is_a?(HttpUrl)
+    @host == o.host and @port == o.port and @path == o.path and @query == o.query
+  end
 end
