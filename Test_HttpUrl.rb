@@ -39,6 +39,12 @@ class Test_HtmlUrl < Test::Unit::TestCase
     assert_equal ['www.ntecs.de', 80, '/d/e/gh', "query2"], parse('gh?query2', base).to_a
   end
 
+  def test_query_sorting
+    base = parse('http://www.ntecs.de/')
+    assert_equal 'a=1&a=2&a=2', parse('?a=2&a=1&a=2', base).query
+    assert_equal 'a=1&a=2&b=2', parse('?b=2&a=1&a=2', base).query
+  end
+
   protected
 
   def parse(href, base_url=nil)

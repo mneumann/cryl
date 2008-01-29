@@ -9,6 +9,7 @@ class HttpUrl
   attr_accessor :host, :port, :path, :query, :original_url
 
   require 'uri'
+  require 'cgi'
   require 'digest/sha1'
 
   def self.parse(href, base_url=nil)
