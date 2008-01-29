@@ -3,7 +3,7 @@
 #
 
 require 'test/unit'
-require 'http_url'
+require 'HttpUrl'
 
 class Test_HtmlUrl < Test::Unit::TestCase
   def test_relative_without_base_url
