@@ -60,6 +60,18 @@ class NodeManager
     File.open(@queue_version, 'w+') {|f| f.puts "0"}
   end
 
+  def log_error(reason, data)
+    raise ArgumentError if data =~ /[\r\n]/
+    @error_log_file ||= File.open(@error_log, 'a+') 
+    @error_log_file.puts "#{reason.to_s.ljust(35)} #{data}"
+  end
+
+  def log(reason, data)
+    raise ArgumentError if data =~ /[\r\n]/
+    @action_log_file ||= File.open(@action_log, 'a+') 
+    @action_log_file.puts "#{reason.to_s.ljust(35)} #{data}"
+  end
+
   #
   # Enqueue always works on the 'next' queue, while
   # from the current queue elements are only dequeued.
@@ -117,6 +129,8 @@ class NodeManager
       fh.close if fh
     end
     @current_queue_file.close if @current_queue_file
+    @error_log_file.close if @error_log_file
+    @action_log_file.close if @action_log_file
   end
 
   private
