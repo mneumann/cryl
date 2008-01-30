@@ -14,6 +14,8 @@ class NodeManager
   #
   attr_reader :root_dir
 
+  attr_reader :files_dir
+
   def initialize(root_dir, num_queues=213)
     @num_queues = num_queues
     @root_dir = File.expand_path(root_dir)
@@ -36,6 +38,7 @@ class NodeManager
     # Temporary files
     #
     @tmps_dir = File.join(@root_dir, 'tmps')
+    @tmps_cnt = 0
   end
 
   #
@@ -117,6 +120,13 @@ class NodeManager
     File.open(@queue_version, 'w+') {|f| f.puts version.to_s }
   end
 
+  def request_temp_filename
+    @tmps_cnt += 1
+    fn = File.join(@tmps_dir, @tmps_cnt.to_s)
+    raise "FATAL" if File.exist?(fn)
+    return fn
+  end
+
   def shutdown
     @next_queue_files.each do |fh|
       fh.close if fh
@@ -134,29 +144,4 @@ class NodeManager
     q += rand(@num_queues)
     return q % @num_queues
   end
-end
-
-if __FILE__ == $0
-  n = NodeManager.new('/tmp/crawly')
-  n.setup!
-  require 'HttpUrl'
-
-  File.open('/tmp/adbrite-urls.txt', 'r') do |f|
-    i = 0
-    while line = f.gets
-      if http_url = HttpUrl.parse(line)
-        n.enqueue_url(http_url.to_s)
-      else
-        puts "FAILED: #{ line }"
-      end
-      i += 1
-      break if i > 10_000
-    end
-  end
-
-  while url = n.dequeue_url
-    #puts url
-  end
-
-  n.shutdown
 end
