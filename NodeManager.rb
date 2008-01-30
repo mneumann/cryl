@@ -14,8 +14,6 @@ class NodeManager
   #
   attr_reader :root_dir
 
-  attr_reader :files_dir
-
   def initialize(root_dir, num_queues=213)
     @num_queues = num_queues
     @root_dir = File.expand_path(root_dir)
@@ -102,22 +100,9 @@ class NodeManager
     return nil # all queues are empty
   end
 
-  def switch_queues
-    @next_queue_files.each do |fh|
-      fh.close if fh
-    end
-    @next_queue_files = Array.new(@num_queues)
-    @current_queue_file.close if @current_queue_file
-
-    return if Dir[File.join(@next_queue_dir, '*')].empty? and 
-              Dir[File.join(@current_queue_dir, '*')].empty?
-
-    File.rename(@current_queue_dir, @current_queue_dir + ".rename")
-    File.rename(@next_queue_dir, @current_queue_dir) 
-    File.rename(@current_queue_dir + ".rename", @next_queue_dir)
-
-    version = File.read(@queue_version).to_i + 1
-    File.open(@queue_version, 'w+') {|f| f.puts version.to_s }
+  def has_file?(name)
+    fn = File.join(@files_dir, name)
+    File.exist?(fn) or File.exist?(fn + ".err")
   end
 
   def request_temp_filename
@@ -135,6 +120,24 @@ class NodeManager
   end
 
   private
+
+  def switch_queues
+    @next_queue_files.each do |fh|
+      fh.close if fh
+    end
+    @next_queue_files = Array.new(@num_queues)
+    @current_queue_file.close if @current_queue_file
+
+    return if Dir[File.join(@next_queue_dir, '*')].empty? and 
+              Dir[File.join(@current_queue_dir, '*')].empty?
+
+    File.rename(@current_queue_dir, @current_queue_dir + ".rename")
+    File.rename(@next_queue_dir, @current_queue_dir) 
+    File.rename(@current_queue_dir + ".rename", @next_queue_dir)
+
+    version = File.read(@queue_version).to_i + 1
+    File.open(@queue_version, 'w+') {|f| f.puts version.to_s }
+  end
 
   def select_queue(seed_string=nil)
     q = 0 
