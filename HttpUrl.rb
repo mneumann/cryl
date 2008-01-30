@@ -129,6 +129,10 @@ class HttpUrl
     str
   end
 
+  def host_ip_addr?
+    @host =~ /^\d+[.]\d+[.]\d+[.]\d+$/ ? true : false
+  end
+
   def to_filename
     a = @host.split(".").reverse.map {|s| s.gsub!(/[^A-Za-z0-9_-]*/, '') }
     a << Digest::SHA1.hexdigest(self.to_s)

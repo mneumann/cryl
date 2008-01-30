@@ -45,6 +45,11 @@ class Test_HtmlUrl < Test::Unit::TestCase
     assert_equal 'a=1&a=2&b=2', parse('?b=2&a=1&a=2', base).query
   end
 
+  def test_host_ip_addr
+    assert_equal true,  parse('http://127.0.0.1:8000/').host_ip_addr?
+    assert_equal false, parse('http://www.ntecs.de:8000/').host_ip_addr?
+  end
+
   protected
 
   def parse(href, base_url=nil)
