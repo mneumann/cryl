@@ -1,3 +1,9 @@
+#
+# A VictimCache is a cache that simply replaces an element in case of a
+# collision.
+#
+# Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
+#
 class VictimCache < Array
   def initialize(size)
     super(size)
