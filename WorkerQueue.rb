@@ -31,8 +31,12 @@ class WorkerQueue
   # Moves an item from the input_queue to the output_queue.
   #
   def complete(item)
+    remove_from_input(item)
+    enqueue_into_output(item)
+  end
+
+  def remove_from_input(item)
     @input_queue.delete(item) || raise
-    @output_queue.push(item)
   end
 
   def enqueue(item)
