@@ -9,6 +9,7 @@ class Scheduler
   require 'VictimCache'
   require 'WorkerQueue'
   require 'HttpUrl'
+  require 'HttpClient'
   require 'set'
 
   DNS_VICTIM_CACHE_SIZE = 1000
@@ -35,6 +36,35 @@ class Scheduler
     end
   end
 
+  class HttpHandler < ::HttpClient::Handler
+    def initialize(task, node_manager)
+      @task, @node_manager = task, node_manager
+      @basename = @node_manager.ensure_filename(@task.http_url.to_filename)
+      @io = File.open(@basename + '.err', 'w')
+      super(@task.http_url.host, @task.http_url.request_uri)
+    end
+
+    def error(reason)
+      reason ||= :fetch_failed
+      @io.close rescue nil
+      @node_manager.log_error reason, @task.http_url.to_s.inspect
+    end
+
+    def header(hash)
+      # TODO:
+    end
+
+    def body(data)
+      @io.write(data)
+    end
+
+    def success
+      @io.close
+      File.rename(@basename + '.err', @basename)
+      @node_manager.log :success, @task.http_url.to_s.inspect
+    end
+  end
+
   def initialize(node_manager, max_tasks)
     @node_manager = node_manager
     @event_loop = Rev::Loop.new
@@ -52,26 +82,44 @@ class Scheduler
 
     @dns_worker_queue = WorkerQueue.new(max_tasks)
     @fetch_worker_queue = WorkerQueue.new(max_tasks) 
+
+    #
+    # Contains all IP addresses to which we are currently connected
+    # (HTTP connection)
+    #
+    @current_connections = Hash.new
   end
 
   def run
     while true
-      step()
       @event_loop.run_once
+      step()
       break if @event_loop.watchers.empty?
     end
   end
 
   def step
     #
+    # Dequeue all tasks that completed (either successfully or not)
+    #
+    while task = @fetch_worker_queue.dequeue
+      @current_connections.delete(task.ip)
+    end
+
+    #
     # move DNS resolved tasks into the fetch queue.
     #
     @dns_worker_queue.transfer(@fetch_worker_queue) do |task|
-      # TODO:
-      # test for connections. if there is already a connection to
-      # the same IP then skip it 
-      puts "OK: #{task.http_url.host} -> #{task.ip}"
-      true
+      if @current_connections.include?(task.ip)
+        # Skip it (for now) if there is a HTTP connection to this IP
+        false
+      else
+        @current_connections[task.ip] = task
+        attach_job(HttpClient.new(task.ip, task.http_url.port,
+                                  HttpHandler.new(task, @node_manager)))
+
+        true
+      end
     end
    
     while not @dns_worker_queue.full?

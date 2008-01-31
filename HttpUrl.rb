@@ -129,6 +129,8 @@ class HttpUrl
     str
   end
 
+  alias request_uri pathquery
+
   def host_ip_addr?
     @host =~ /^\d+[.]\d+[.]\d+[.]\d+$/ ? true : false
   end

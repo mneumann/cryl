@@ -31,12 +31,6 @@ class NodeManager
     @logs_dir = File.join(@root_dir, 'logs')
     @error_log = File.join(@logs_dir, 'error.log')
     @action_log = File.join(@logs_dir, 'action.log')
-
-    # 
-    # Temporary files
-    #
-    @tmps_dir = File.join(@root_dir, 'tmps')
-    @tmps_cnt = 0
   end
 
   #
@@ -50,7 +44,6 @@ class NodeManager
     FileUtils.mkdir_p(@logs_dir)
     FileUtils.mkdir_p(@current_queue_dir)
     FileUtils.mkdir_p(@next_queue_dir)
-    FileUtils.mkdir_p(@tmps_dir)
 
     File.open(@error_log, 'w+') {|f|}
     File.open(@action_log, 'w+') {|f|}
@@ -64,12 +57,14 @@ class NodeManager
     raise ArgumentError if data =~ /[\r\n]/
     @error_log_file ||= File.open(@error_log, 'a+') 
     @error_log_file.puts "#{reason.to_s.ljust(35)} #{data}"
+    @error_log_file.flush
   end
 
   def log(reason, data)
     raise ArgumentError if data =~ /[\r\n]/
     @action_log_file ||= File.open(@action_log, 'a+') 
     @action_log_file.puts "#{reason.to_s.ljust(35)} #{data}"
+    @action_log_file.flush
   end
 
   #
@@ -112,16 +107,19 @@ class NodeManager
     return nil # all queues are empty
   end
 
-  def has_file?(name)
-    fn = File.join(@files_dir, name)
-    File.exist?(fn) or File.exist?(fn + ".err")
+  def filename(name)
+    File.join(@files_dir, name)
   end
 
-  def request_temp_filename
-    @tmps_cnt += 1
-    fn = File.join(@tmps_dir, @tmps_cnt.to_s)
-    raise "FATAL" if File.exist?(fn)
+  def ensure_filename(name)
+    fn = filename(name)
+    FileUtils.mkdir_p(File.dirname(fn))
     return fn
+  end
+
+  def has_file?(name)
+    fn = filename(name)
+    File.exist?(fn) or File.exist?(fn + ".err")
   end
 
   def shutdown

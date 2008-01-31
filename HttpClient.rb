@@ -6,7 +6,9 @@
 #
 # TODO:
 #
-#   Implement Chunk Encoding
+#   * Implement Chunk Encoding
+#   * Check HTTP return code (200)
+#   * Redirects
 #
 # Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
 #
@@ -148,7 +150,8 @@ class HttpClient < Rev::IOWatcher
         success() if complete?
       end
     end
-  rescue
+  rescue => e
+    STDERR.puts "unexpected_error: #{e}"
     error(:unexpected_error)
   end
 
@@ -170,14 +173,15 @@ class HttpClient < Rev::IOWatcher
         @state = :wait_for_header
       end
     end
-  rescue
+  rescue => e
+    STDERR.puts "unexpected_error: #{e}"
     error(:unexpected_error)
   end
 
   private
 
   def complete?
-    @remaining <= 0 or (@remaining.nil? and @socket.eof?)
+    (@remaining and @remaining <= 0) or (@remaining.nil? and @socket.eof?)
   end
 
   def success
