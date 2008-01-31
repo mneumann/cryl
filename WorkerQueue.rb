@@ -41,6 +41,17 @@ class WorkerQueue
   end
 
   #
+  # Directly enqueue +item+ into the output queue.
+  #
+  # This can be used for example when a processing step
+  # should be skipped (maybe due to using a cached value).
+  #
+  def enqueue_into_output(item)
+    raise if full?
+    @output_queue.push(item)
+  end
+
+  #
   # Return +nil+ when output_queue is empty
   #
   def dequeue
