@@ -4,15 +4,15 @@
 #
 #   input_queue.size + output_queue.size <= @max_size
 #
-# Note, +nil+ shouldn't be used as element. Accepts only unique items in
-# it's input queue, i.e. no duplicate items are allowed.
+# Note, +nil+ shouldn't be used as element. Also, duplicate items
+# shouldn't be used as remove_from_input removes all duplicates. 
 #
 # Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
 #
 class WorkerQueue
   def initialize(max_size)
-    @max_size = size
-    @input_queue = Hash.new
+    @max_size = max_size
+    @input_queue = Array.new
     @output_queue = Array.new
   end
 
@@ -40,8 +40,8 @@ class WorkerQueue
   end
 
   def enqueue(item)
-    raise if full? or @input_queue.include?(item)
-    @input_queue[item] = item
+    raise if full? 
+    @input_queue.push(item)
   end
 
   #
