@@ -75,4 +75,27 @@ class WorkerQueue
       end
     end
   end
+
+  #
+  # Transfer items the output_queue of +self+ into the input_queue 
+  # of +worker_queue as long as the input_queue is not full. Only
+  # transfer items for which the block evalutes to +true+.
+  #
+  # You are not allowed to modify the worker_queues during this
+  # operation!
+  #
+  def transfer(worker_queue)
+    delete_list = []
+    @output_queue.each do |item|
+      break if worker_queue.full?
+      if yield(item)
+        worker_queue.enqueue(item)
+        delete_list.push(item)
+      end
+    end
+
+    delete_list.each do |item|
+      @output_queue.delete(item)
+    end
+  end
 end
