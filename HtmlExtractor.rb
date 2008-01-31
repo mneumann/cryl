@@ -5,7 +5,6 @@
 #
 # It uses a very fast (and low memory overhead) streaming Html parser.
 #
-#
 # Copyright (c) 2007, 2008 by Michael Neumann (mneumann@ntecs.de)
 #
 class HtmlExtractor
