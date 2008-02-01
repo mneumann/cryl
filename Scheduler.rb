@@ -14,7 +14,7 @@ class Scheduler
 
   DNS_VICTIM_CACHE_SIZE = 1000
 
-  class Task < Struct.new(:http_url, :ip); end
+  class Task < Struct.new(:http_url, :ip, :failure); end
 
   #
   # Note: Watcher detaches itself from the event loop, so we don't have
@@ -37,17 +37,16 @@ class Scheduler
   end
 
   class HttpHandler < ::HttpClient::Handler
-    def initialize(task, node_manager)
-      @task, @node_manager = task, node_manager
-      @basename = @node_manager.ensure_filename(@task.http_url.to_filename)
+    def initialize(scheduler, task, basename)
+      @scheduler, @task, @basename = scheduler, task, basename
       @io = File.open(@basename + '.err', 'w')
       super(@task.http_url.host, @task.http_url.request_uri)
     end
 
     def error(reason)
-      reason ||= :fetch_failed
+      @task.failure = reason || :fetch_failed
       @io.close rescue nil
-      @node_manager.log_error reason, @task.http_url.to_s.inspect
+      @scheduler.fetch_done(@task)
     end
 
     def header(hash)
@@ -61,7 +60,7 @@ class Scheduler
     def success
       @io.close
       File.rename(@basename + '.err', @basename)
-      @node_manager.log :success, @task.http_url.to_s.inspect
+      @scheduler.fetch_done(@task)
     end
   end
 
@@ -100,13 +99,6 @@ class Scheduler
 
   def step
     #
-    # Dequeue all tasks that completed (either successfully or not)
-    #
-    while task = @fetch_worker_queue.dequeue
-      @current_connections.delete(task.ip)
-    end
-
-    #
     # move DNS resolved tasks into the fetch queue.
     #
     @dns_worker_queue.transfer(@fetch_worker_queue) do |task|
@@ -114,10 +106,7 @@ class Scheduler
         # Skip it (for now) if there is a HTTP connection to this IP
         false
       else
-        @current_connections[task.ip] = task
-        attach_job(HttpClient.new(task.ip, task.http_url.port,
-                                  HttpHandler.new(task, @node_manager)))
-
+        fetch(task)
         true
       end
     end
@@ -159,11 +148,31 @@ class Scheduler
     attach_job(DnsResolver.new(self, task))
   end
 
-  def attach_job(job)
-    job.attach(@event_loop)
+  # 
+  # done == success or failure
+  # 
+  def fetch_done(task)
+    @fetch_worker_queue.remove_from_input(task)
+    @current_connections.delete(task.ip)
+    if task.failure
+      @node_manager.log_error task.failure, task.http_url.to_s.inspect
+    else
+      @node_manager.log :success, task.http_url.to_s.inspect
+    end
+  end
+
+  def fetch(task)
+    @current_connections[task.ip] = task
+    basename = @node_manager.ensure_filename(task.http_url.to_filename)
+    attach_job(HttpClient.new(task.ip, task.http_url.port,
+                              HttpHandler.new(self, task, basename)))
   end
 
   protected
+
+  def attach_job(job)
+    job.attach(@event_loop)
+  end
 
   #
   # Returns the next HttpUrl that is neither invalid nor already
