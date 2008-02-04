@@ -11,32 +11,37 @@ require 'socket'
 require 'resolv'
 
 class DnsResolver < Rev::IOWatcher
-  TIMEOUT = 3
-  MAX_REQS = 5 
+  TIMEOUT = 4
+  MAX_REQS = 10
+  MAX_RETRIES = 4
+  MAX_NS = 5
 
   class Timeout < Rev::TimerWatcher
-    def initialize(ref, interval, repeating) 
-      @ref = ref
+    def initialize(interval, repeating, &timeout) 
+      @timeout = timeout
       super(interval, repeating)
     end
-    def on_timer
-      @ref.on_timeout
-    end
+    def on_timer; @timeout.call() end
   end
 
   def self.ns_from_resolv_conf(file='/etc/resolv.conf')
-    File.read(file).scan(/^\s*nameserver\s+(.+)\s*$/).flatten.last
+    File.read(file).scan(/^\s*nameserver\s+(.+)\s*$/).flatten
   end
 
-  def initialize(hostname, nameserver=DnsResolver.ns_from_resolv_conf(),
-                 max_reqs=MAX_REQS, use_syscall=true, &notify) 
-    @hostname, @nameserver = hostname, nameserver
-    @orig_hostname = hostname
-    @socket = UDPSocket.new
-    @max_reqs, @reqs = max_reqs, 0
+  def initialize(hostname, nameservers=DnsResolver.ns_from_resolv_conf(),
+                 max_reqs=MAX_REQS, max_retries=MAX_RETRIES,
+                 use_syscall=true, &notify) 
+    @hostname, @nameservers = hostname, nameservers.cycle
+    @max_reqs = max_reqs
+    @max_retries = max_retries
     @use_syscall = use_syscall
     @notify = notify
-    @timer = Timeout.new(self, TIMEOUT, repeating=true)
+
+    @socket = UDPSocket.new
+    @orig_hostname = hostname
+    @reqs = 0
+    @tries = 0
+    @timer = Timeout.new(TIMEOUT, repeating=true) { on_timeout() }
     super(@socket)
   end
 
@@ -47,12 +52,17 @@ class DnsResolver < Rev::IOWatcher
   end
 
   def detach
-    @timer.detach if @timer and @timer.attached?
+    @timer.detach if @timer.attached?
     super
   end
 
   def on_readable
-    message = decode_message(@socket.recvfrom_nonblock(Resolv::DNS::UDPSize).first)
+    begin
+      message = decode_message(@socket.recvfrom_nonblock(Resolv::DNS::UDPSize).first)
+    rescue
+      on_failure(:recv_failed)
+      return
+    end
 
     if message and message.id == @request.id
       additional_map = {} 
@@ -78,33 +88,26 @@ class DnsResolver < Rev::IOWatcher
         end
       end
 
-      if cname
-        send_request(cname)
-        return
-      end
-
-      ns = nil
+      nameservers = []
       message.each_authority do |name, ttl, data|
         case data
         when Resolv::DNS::Resource::IN::NS
           ns = data.name.to_s
-          if ns_addr = additional_map[ns] 
-            send_request(nil, ns_addr)
-            return
-          end
+          nameservers << (additional_map[ns] || ns)
         end
       end
 
-      if ns
-        send_request(nil, ns)
+      unless nameservers.empty? 
+        send_request(cname, nameservers.sort)
         return
       end
     end
 
-    on_failure(:invalid_message)
+    send_request!
   end
 
   def on_timeout
+    STDERR.puts "WARN: DnsResolver: TIMEOUT for #{@current_ns}"
     on_failure(:timeout)
   end
 
@@ -114,7 +117,8 @@ class DnsResolver < Rev::IOWatcher
   end
 
   def on_failure(reason)
-    if @reqs < @max_reqs
+    @tries += 1
+    if @tries < @max_retries
       # retry
       send_request()
       return
@@ -126,6 +130,7 @@ class DnsResolver < Rev::IOWatcher
     # syscall.
     #
     if @use_syscall
+      STDERR.puts "WARN: DnsResolver: fall back to gethostbyname - #{@orig_hostname}"
       ip = Socket.gethostbyname(@orig_hostname).last.unpack('C*').join('.') rescue nil
       if ip
         @notify.call(true, ip) 
@@ -139,19 +144,38 @@ class DnsResolver < Rev::IOWatcher
 
   protected
 
-  def send_request(hostname=nil, nameserver=nil)
+  def send_request(hostname=nil, nameservers=nil)
     @timer.reset
     @hostname = hostname || @hostname
-    @nameserver = nameserver || @nameserver
+    @nameservers = nameservers.cycle if nameservers
 
     if @reqs >= @max_reqs
       on_failure(:max_reqs_reached)
       return
     end
 
+    found = false
+    n = 0
+    @nameservers.each do |ns|
+      begin
+        @socket.connect(ns, Resolv::DNS::Port)
+        @current_ns = ns
+        break
+      rescue
+        STDERR.puts "WARN: DnsResolver: connect failed to #{ ns }"
+      end
+      if (n += 1) >= MAX_NS
+        on_failure(:connection_failed)
+        return
+      end
+    end
+
+    send_request!
+  end
+
+  def send_request!
     @request = Resolv::DNS::Message.new
-    @request.add_question(@hostname, Resolv::DNS::Resource::IN::A)
-    @socket.connect(@nameserver, Resolv::DNS::Port)
+    @request.add_question(@hostname, Resolv::DNS::Resource::IN::ANY)
     @socket.send(@request.encode, 0)
     @reqs += 1
   end
