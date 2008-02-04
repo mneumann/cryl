@@ -10,31 +10,12 @@ class Scheduler
   require 'WorkerQueue'
   require 'HttpUrl'
   require 'HttpClient'
+  require 'DnsResolver'
   require 'set'
 
   DNS_VICTIM_CACHE_SIZE = 1000
 
   class Task < Struct.new(:http_url, :ip, :failure); end
-
-  #
-  # Note: Watcher detaches itself from the event loop, so we don't have
-  # to do that ourself.
-  #
-  class DnsResolver < Rev::DNSResolver
-    def initialize(scheduler, task)
-      @scheduler, @task = scheduler, task
-      super(@task.http_url.host)
-    end
-
-    def on_success(ip_addr)
-      @task.ip = ip_addr
-      @scheduler.dns_complete(@task)
-    end
-
-    def on_failure
-      @scheduler.dns_failed(@task)
-    end
-  end
 
   class HttpHandler < ::HttpClient::Handler
     def initialize(scheduler, task, basename)
@@ -119,7 +100,7 @@ class Scheduler
           # directly into the output queue.
           @dns_worker_queue.enqueue_into_output(Task.new(http_url, ip))
         elsif @dns_failures.include?(http_url.host)
-          @node_manager.log_error :dns_failure, http_url.to_s.inspect
+          @node_manager.log_error :dns_failure_skip, http_url.to_s.inspect
         else
           # We have to start a resolver task.
           task = Task.new(http_url)
@@ -145,7 +126,15 @@ class Scheduler
 
   def dns_resolve(task)
     # TODO: test if the hostname is currently resolved. ignore for now!
-    attach_job(DnsResolver.new(self, task))
+    resolver = DnsResolver.new(task.http_url.host) {|ok, addr|
+      if ok
+        task.ip = addr
+        dns_complete(task)
+      else
+        dns_failed(task)
+      end
+    }
+    attach_job(resolver)
   end
 
   # 
