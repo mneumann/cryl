@@ -23,6 +23,6 @@ if __FILE__ == $0
   node_manager.setup!
   enqueue_list(node_manager, File.open('/tmp/adbrite-urls.txt'), 10_000)
 
-  scheduler = Scheduler.new(node_manager, 1000)
+  scheduler = Scheduler.new(node_manager, 100)
   scheduler.run
 end
