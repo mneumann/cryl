@@ -28,10 +28,13 @@ class DnsResolver < Rev::IOWatcher
     File.read(file).scan(/^\s*nameserver\s+(.+)\s*$/).flatten.last
   end
 
-  def initialize(hostname, nameserver=DnsResolver.ns_from_resolv_conf(), max_reqs=MAX_REQS, &notify) 
+  def initialize(hostname, nameserver=DnsResolver.ns_from_resolv_conf(),
+                 max_reqs=MAX_REQS, use_syscall=true, &notify) 
     @hostname, @nameserver = hostname, nameserver
+    @orig_hostname = hostname
     @socket = UDPSocket.new
     @max_reqs, @reqs = max_reqs, 0
+    @use_syscall = use_syscall
     @notify = notify
     @timer = Timeout.new(self, TIMEOUT, repeating=true)
     super(@socket)
@@ -117,7 +120,21 @@ class DnsResolver < Rev::IOWatcher
       return
     end
     detach()
-    @notify.call(false, reason) 
+
+    #
+    # If everything fails, try to get the hostname via a blocking
+    # syscall.
+    #
+    if @use_syscall
+      ip = Socket.gethostbyname(@orig_hostname).last.unpack('C*').join('.') rescue nil
+      if ip
+        @notify.call(true, ip) 
+      else
+        @notify.call(false, :gethostbyname_failed) 
+      end
+    else
+      @notify.call(false, reason) 
+    end
   end
 
   protected
