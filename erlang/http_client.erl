@@ -8,13 +8,9 @@
 %
 
 -module(http_client).
-%-export([start/0]).
 -export([download/2]).
 -record(state, {version, code, content_length, chunked, content_type}). 
 -define(CRLF, "\r\n").
-
-%start() ->
-%    download({"www.ntecs.de", 80, "www.ntecs.de", "/"}, "/tmp/www.ntecs.de").
 
 default_state() ->
   #state{version = undefined,
