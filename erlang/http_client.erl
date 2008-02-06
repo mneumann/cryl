@@ -23,13 +23,15 @@ download({IP, Port, Host, ReqURI}, Filename) ->
     case gen_tcp:connect(IP, Port, [binary, {packet, http}, {active, false}]) of
         {ok, Sock} ->
             Req = construct_request(Host, ReqURI),
+                Return =
                 case gen_tcp:send(Sock, Req) of
                     ok ->
                         recv_head(Sock, Filename, default_state());
                     {error, Msg} ->
-                        gen_tcp:close(Sock),
                         {error, {send_request, Msg}}
-                end;
+                end,
+                gen_tcp:close(Sock),
+                Return;
         {error, Msg} ->
             {error, {connect, Msg}}
   end.
@@ -55,18 +57,15 @@ recv_head(Sock, Filename, State) ->
                         recv_head(Sock, Filename,
                                   State#state{version=Version, code=Code});
                     404 -> 
-                        gen_tcp:close(Sock),
                         not_found;
                     _   ->
-                        gen_tcp:close(Sock),
-                        {fail, invalid_code}  
+                        {fail, invalid_code, Code}  
                 end;
             {http_header, _, Key, _, Val} ->
                 case header({Key, Val}, State) of
                     {ok, NewState} -> 
                         recv_head(Sock, Filename, NewState);
                     {fail, Msg}=M ->
-                        gen_tcp:close(Sock),
                         M
                 end;
             http_eoh ->
@@ -81,11 +80,9 @@ recv_head(Sock, Filename, State) ->
                         {redirect, State#state.location} 
                 end;
             _ ->
-                gen_tcp:close(Sock), 
                 {fail, invalid_header}
             end;
         {error, Msg} ->
-            gen_tcp:close(Sock),
             {error, {recv_response, Msg}}
     end.
 
@@ -111,7 +108,7 @@ header({_K,_V}, State) ->
     {ok, State}.
 
 recv_body(Sock, Filename, C) ->
-    case file:open(Filename, [write, raw, compressed]) of
+    case file:open(Filename, [write, raw]) of %, compressed]) of
         {ok, IO} ->
             Res = recv_body2(Sock, IO, C),
             file:close(IO),
@@ -150,13 +147,12 @@ recv_data(Sock, IO) ->
         {ok, Data} ->
             file:write(IO, Data),
             recv_data(Sock, IO);
-        {error, _Msg} -> % TODO: handle errors
-            gen_tcp:close(Sock),
-            ok
+        {error, Msg} -> % TODO: handle errors
+            {error, {recv_data, Msg}}
+            %ok
     end.
 
-recv_data(Sock, _IO, 0) -> 
-    gen_tcp:close(Sock),
+recv_data(_Sock, _IO, 0) -> 
     ok;
 
 recv_data(Sock, IO, Len) when (Len > 0) ->
@@ -165,11 +161,10 @@ recv_data(Sock, IO, Len) when (Len > 0) ->
             file:write(IO, Data),
             recv_data(Sock, Len - size(Data));
         {error, Msg} ->
-            {error, Msg}
+            {error, {recv_data, Msg}}
     end;
 
-recv_data(Sock, _IO, _) ->
-    gen_tcp:close(Sock),
+recv_data(_Sock, _IO, _) ->
     {error, unexpected}.
 
 recv_chunk(Sock, IO) ->
@@ -177,28 +172,20 @@ recv_chunk(Sock, IO) ->
     case gen_tcp:recv(Sock, 0) of
         {ok, Line} ->
             case my_utils:hex_string_to_integer(binary_to_list(Line)) of
-                %{error, _} ->
-                %    gen_tcp:close(Sock),
-                %    {error, chunk_failure};
-                %{0, _} ->
                 0 ->
                     inet:setopts(Sock, [{packet, http}]),
                     recv_trailer(Sock),
-                    gen_tcp:close(Sock),
                     ok;
-                %{Len, _} ->
                 Len ->
                     inet:setopts(Sock, [{packet, raw}]),
                     case recv_chunk_data(Sock, IO, Len) of
                         ok ->
                             recv_chunk(Sock, IO);
                         Msg -> 
-                            gen_tcp:close(Sock),
                             Msg
                     end
             end;
         _ ->
-            gen_tcp:close(Sock),
             {error, failed_to_read_chunk_header}
     end.
 
@@ -214,7 +201,7 @@ recv_chunk_data(Sock, IO, Len) when (Len > 0) ->
             file:write(IO, Data),
             recv_chunk_data(Sock, IO, Len - size(Data));
         {error, Msg} ->
-            {error, Msg}
+            {error, {recv_chunk_data, Msg}}
     end;
 
 recv_chunk_data(_Sock, _IO, _) -> 

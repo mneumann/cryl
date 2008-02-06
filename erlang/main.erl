@@ -5,7 +5,7 @@
 -define(ROOT_DIR, "/tmp/download").
 -define(URL_FILE, "/home/mneumann/adbrite-urls.txt").
 
-request_completed(Request, Reason) ->
+request_completed(_Request, Reason) ->
     %io:format("Request completed: ~p, ~p~n", [Request, Reason]).
     io:format("~p~n", [Reason]).
 
