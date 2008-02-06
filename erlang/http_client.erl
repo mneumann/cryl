@@ -147,9 +147,8 @@ recv_data(Sock, IO) ->
         {ok, Data} ->
             file:write(IO, Data),
             recv_data(Sock, IO);
-        {error, Msg} -> % TODO: handle errors
-            {error, {recv_data, Msg}}
-            %ok
+        {error, Msg} ->
+            {error, {recv_data_2, Msg}}
     end.
 
 recv_data(_Sock, _IO, 0) -> 
@@ -161,7 +160,7 @@ recv_data(Sock, IO, Len) when (Len > 0) ->
             file:write(IO, Data),
             recv_data(Sock, Len - size(Data));
         {error, Msg} ->
-            {error, {recv_data, Msg}}
+            {error, {recv_data_3, Msg}}
     end;
 
 recv_data(_Sock, _IO, _) ->
