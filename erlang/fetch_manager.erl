@@ -49,7 +49,6 @@ loop(State) ->
 %
 complete_request(Pid, Reason, State) ->
     {Request, State2} = remove_active_request(Pid, State),
-    %io:format("Request completed: ~p~n", [Request]),
    
     %
     % Lets see if there is a request with the same IP as 
@@ -110,15 +109,15 @@ remove_active_request(Pid, State) ->
 %
 start_request(none, State) -> State;
 start_request(Request, State) ->
-    %io:format("Starting request: ~p~n", [Request]),
     Pid = spawn_link(fun() ->
         Res = http_client:download({
             Request#request.server_ip,
             Request#request.port,
             Request#request.host,
             Request#request.request_uri},
-            Request#request.filename)
-        %io:format("Download completed with: ~p~n", [Res])
+            Request#request.filename),
+        % Notify the linked process with the return status.
+        exit(Res)
     end),
     State#state{
         connections =

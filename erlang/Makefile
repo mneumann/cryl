@@ -7,5 +7,4 @@ compile:
 	erlc *.erl
 
 run:
-	rm -rf /tmp/download
 	erl -run main -noinput -noshell

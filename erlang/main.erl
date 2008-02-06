@@ -5,33 +5,37 @@
 -define(ROOT_DIR, "/tmp/download").
 -define(URL_FILE, "/home/mneumann/adbrite-urls.txt").
 
-loop(0) -> ok;
-loop(Outstanding) ->
+request_completed(Request, Reason) ->
+    %io:format("Request completed: ~p, ~p~n", [Request, Reason]).
+    io:format("~p~n", [Reason]).
+
+cleanup(0) -> ok;
+cleanup(Outstanding) ->
     receive
         {complete, Req, Reason} ->
-            %io:format("Request completed: ~p, ~p~n", [Req, Reason]),
-            loop(Outstanding-1)
+            request_completed(Req, Reason),
+            cleanup(Outstanding-1)
     end.
 
 loop(File, N, Outstanding) when (Outstanding >= ?MAX_FETCHES) ->
     receive
         {complete, Req, Reason} ->
-            %io:format("Request completed: ~p, ~p~n", [Req, Reason]),
+            request_completed(Req, Reason),
             loop(File, N, Outstanding-1)
     end;
 
 loop(File, N, Outstanding) ->
-    receive
-        {complete, Req, Reason} ->
-            %io:format("Request completed: ~p, ~p~n", [Req, Reason]),
-            loop(File, N, Outstanding-1)
-    after 0 -> 
-        skip
-    end,
+    %receive
+    %    {complete, Req, Reason} ->
+    %        request_completed(Req, Reason),
+    %        loop(File, N, Outstanding-1)
+    %after 0 -> 
+    %    skip
+    %end,
 
     case io:get_line(File, '') of
         eof -> 
-            loop(Outstanding);
+            cleanup(Outstanding);
         Str ->
             Y = post_request(my_utils:strip(Str)),
             loop(File, N, Outstanding+Y)
@@ -46,23 +50,29 @@ resolve_host(Host) ->
     end.
  
 post_request(URL) ->
-    %io:format("~p~n", [URL]),
     case url_to_path(URL) of
-        {ok, Filename, _URL2, {Host,Port,ReqURI}} -> 
-              Path = filename:join(?ROOT_DIR, Filename),
-              %io:format("~p~n", [Path]),
-              filelib:ensure_dir(Path),
-              case resolve_host(Host) of
-                  error ->
-                      io:format("DNS Resolv failed: ~p~n", [Host]),
-                      0;
-                  IP ->
-                      fetcher ! {req, self(), {IP, Port, Host, ReqURI, Path}},
-                      1
-                  end;
+        {ok, Basename, _URL2, {Host,Port,ReqURI}} -> 
+            Filename = filename:join(?ROOT_DIR, Basename),
+            case filelib:is_file(Filename) of
+                true ->
+                    % file already exists. skip it
+                    io:format("File was already fetched. skip.~n"),
+                    0;
+                false ->
+                    filelib:ensure_dir(Filename),
+                    case resolve_host(Host) of
+                        error ->
+                            io:format("DNS Resolv failed: ~p~n", [Host]),
+                            0;
+                        IP ->
+                            fetcher ! {req, self(), 
+                                       {IP, Port, Host, ReqURI, Filename}},
+                            1
+                    end
+            end;
         _ ->
-              io:format("Invalid URL: ~p~n", [URL]),
-              0
+            io:format("Invalid URL: ~p~n", [URL]),
+            0
     end.
 
 start() ->
