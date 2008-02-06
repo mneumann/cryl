@@ -15,12 +15,35 @@ hex_digit_chr(N) when (N >= 10) and (N < 16) -> $a - 10 + N;
 hex_digit_chr(_N) -> throw(invalid_hex_digit).
 
 %
-% Convert a character 
+% Convert a hex character to it's decimal value.
 %
 hex_chr_to_int(N) when (N >= $0) and (N =< $9) -> N - $0;
 hex_chr_to_int(N) when (N >= $A) and (N =< $F) -> 10 + N - $A;
 hex_chr_to_int(N) when (N >= $a) and (N =< $f) -> 10 + N - $a;
 hex_chr_to_int(_N) -> error. 
+
+%
+% Example:
+%   [$F, $F, $Z] -> [15, 15]
+%
+hexdigit_substring([]) -> [];
+hexdigit_substring([C|T]) ->  
+    case hex_chr_to_int(C) of
+        error -> []; 
+        N ->   
+            [N|hexdigit_substring(T)]
+    end.
+
+sumdigits([], _Fact, Sum, _Base) -> Sum;
+sumdigits([H|T], Fact, Sum, Base) ->
+    sumdigits(T, Fact * Base, Sum + H * Fact, Base).  
+
+%
+% Converts a string in hex (e.g. "00FE") to
+% it's decimal value.
+%
+hex_string_to_integer(L) ->
+    sumdigits(lists:reverse(hexdigit_substring(L)), 1, 0, 16).
 
 %
 % Converts a Binary into a hexadecimal representation.
@@ -80,13 +103,3 @@ strip_leading([13|T]) -> strip_leading(T);
 strip_leading([9|T])  -> strip_leading(T);
 strip_leading([11|T]) -> strip_leading(T);
 strip_leading(L)      -> L.
-
-hex_string_to_integer(L) ->
-    hex_string_to_integer(L, 1, 0).
-
-hex_string_to_integer([], _Fac, Sum) -> Sum;
-hex_string_to_integer([C|T], Fac, Sum) ->
-    case hex_chr_to_int(C) of
-      error -> Sum;
-      N     -> hex_string_to_integer(T, Fac*16, Sum + N*Fac)   
-    end.
