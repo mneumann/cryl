@@ -60,6 +60,7 @@ post_request(URL) ->
                     0;
                 false ->
                     filelib:ensure_dir(Filename),
+                    file:write_file(Filename, ""), % create the file
                     case resolve_host(Host) of
                         error ->
                             io:format("DNS Resolv failed: ~p~n", [Host]),
