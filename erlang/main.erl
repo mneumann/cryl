@@ -39,8 +39,8 @@ loop(File, N, Outstanding) ->
 
 resolve_host(Host) ->
     case inet:gethostbyname(Host) of
-        {ok,{hostent,_,_,inet,4,[{A,B,C,D}|_]}} ->
-            string:join(lists:map(fun erlang:integer_to_list/1, [A,B,C,D]), ".");
+        {ok,{hostent,_,_,inet,4,[IP|_]}} ->
+            IP;
         _ ->
             error
     end.
