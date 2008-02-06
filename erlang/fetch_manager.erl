@@ -44,8 +44,6 @@ loop(State) ->
             loop(complete_request(Pid, Reason, State))
     end.
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 %
 % Complete the active request handled by PID. 
 %
@@ -112,7 +110,7 @@ remove_active_request(Pid, State) ->
 %
 start_request(none, State) -> State;
 start_request(Request, State) ->
-    io:format("Starting request: ~p~n", Request),
+    io:format("Starting request: ~p~n", [Request]),
     Pid = spawn_link(fun() ->
         Res = http_client:download({
             Request#request.server_ip,
