@@ -4,7 +4,7 @@
 -module(my_utils).
 -export([binary_to_hex/1, filename_ensure/1, each_line/2, each_line/3,
          each_line_with_index/2, each_line_with_index/3, strip/1,
-         hex_string_to_integer/1]).
+         hex_string_to_integer/1, max/2, min/2]).
 
 %
 % Converts a number in the range of 0-15 to it's 
@@ -103,3 +103,9 @@ strip_leading([13|T]) -> strip_leading(T);
 strip_leading([9|T])  -> strip_leading(T);
 strip_leading([11|T]) -> strip_leading(T);
 strip_leading(L)      -> L.
+
+max(A,  B) when (A >= B) -> A; 
+max(_A, B) -> B.
+
+min(A,  B) when (A =< B) -> A; 
+min(_A, B) -> B.

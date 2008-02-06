@@ -11,7 +11,8 @@
 -export([download/2]).
 -record(state, {version, code, content_length, chunked, content_type,
                 location}). 
--define(CRLF, "\r\n").
+-define(CRLF, <<"\r\n">>).
+-define(BLOCK_SIZE, 16384).
 
 default_state() ->
   #state{version = undefined,
@@ -147,6 +148,8 @@ recv_data(Sock, IO) ->
         {ok, Data} ->
             file:write(IO, Data),
             recv_data(Sock, IO);
+        {error, closed} ->
+            ok;
         {error, Msg} ->
             {error, {recv_data_2, Msg}}
     end.
@@ -155,7 +158,7 @@ recv_data(_Sock, _IO, 0) ->
     ok;
 
 recv_data(Sock, IO, Len) when (Len > 0) ->
-    case gen_tcp:recv(Sock, Len) of
+    case gen_tcp:recv(Sock, my_utils:min(?BLOCK_SIZE, Len)) of
         {ok, Data} ->
             file:write(IO, Data),
             recv_data(Sock, Len - size(Data));
@@ -169,6 +172,9 @@ recv_data(_Sock, _IO, _) ->
 recv_chunk(Sock, IO) ->
     inet:setopts(Sock, [{packet, line}]),
     case gen_tcp:recv(Sock, 0) of
+        {ok, ?CRLF} ->
+            % ignore empty lines
+            recv_chunk(Sock, IO);
         {ok, Line} ->
             case my_utils:hex_string_to_integer(binary_to_list(Line)) of
                 0 ->
@@ -195,7 +201,7 @@ recv_chunk_data(_Sock, _IO, 0) ->
     ok;
 
 recv_chunk_data(Sock, IO, Len) when (Len > 0) ->
-    case gen_tcp:recv(Sock, Len) of
+    case gen_tcp:recv(Sock, my_utils:min(?BLOCK_SIZE, Len)) of
         {ok, Data} ->
             file:write(IO, Data),
             recv_chunk_data(Sock, IO, Len - size(Data));

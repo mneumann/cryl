@@ -25,14 +25,6 @@ loop(File, N, Outstanding) when (Outstanding >= ?MAX_FETCHES) ->
     end;
 
 loop(File, N, Outstanding) ->
-    %receive
-    %    {complete, Req, Reason} ->
-    %        request_completed(Req, Reason),
-    %        loop(File, N, Outstanding-1)
-    %after 0 -> 
-    %    skip
-    %end,
-
     case io:get_line(File, '') of
         eof -> 
             cleanup(Outstanding);
