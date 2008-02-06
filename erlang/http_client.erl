@@ -9,7 +9,8 @@
 
 -module(http_client).
 -export([download/2]).
--record(state, {version, code, content_length, chunked, content_type}). 
+-record(state, {version, code, content_length, chunked, content_type,
+                location}). 
 -define(CRLF, "\r\n").
 
 default_state() ->
@@ -50,9 +51,12 @@ recv_head(Sock, Filename, State) ->
         {ok, Msg} -> case Msg of
             {http_response, Version, Code, _Status} -> 
                 case Code of
-                    200 ->
+                    N when (N == 200) or (N == 302) or (N == 301) ->
                         recv_head(Sock, Filename,
                                   State#state{version=Version, code=Code});
+                    404 -> 
+                        gen_tcp:close(Sock),
+                        not_found;
                     _   ->
                         gen_tcp:close(Sock),
                         {fail, invalid_code}  
@@ -66,9 +70,16 @@ recv_head(Sock, Filename, State) ->
                         M
                 end;
             http_eoh ->
-                recv_body(Sock, Filename,
-                          {State#state.content_length,
-                           State#state.chunked});
+                case State#state.code of
+                    200 ->
+                        recv_body(Sock, Filename,
+                                  {State#state.content_length,
+                                   State#state.chunked});
+                    301 ->
+                        {redirect, State#state.location};
+                    302 ->
+                        {redirect, State#state.location} 
+                end;
             _ ->
                 gen_tcp:close(Sock), 
                 {fail, invalid_header}
@@ -78,13 +89,13 @@ recv_head(Sock, Filename, State) ->
             {error, {recv_response, Msg}}
     end.
 
-header({"Content-Type", _Type}, State) ->
+header({'Content-Type', _Type}, State) ->
     {ok, State};
 
-header({"Transfer-Encoding", "chunked"}, State) ->
+header({'Transfer-Encoding', "chunked"}, State) ->
     {ok, State#state{chunked = true}};
 
-header({"Content-Length", CLen}, State) ->
+header({'Content-Length', CLen}, State) ->
     case string:to_integer(CLen) of
       {Len, ""} when is_integer(Len) and (Len >= 0) ->  
           {ok, State#state{content_length = Len}};
@@ -92,8 +103,12 @@ header({"Content-Length", CLen}, State) ->
           {fail, parse_error_content_length}
     end;
 
-header({_,_}, State)
-    -> {ok, State}.
+header({'Location', Location}, State) ->
+    {ok, State#state{location = Location}};
+
+header({K,V}, State) ->
+    %io:format("~p: ~p~n", [K, V]),
+    {ok, State}.
 
 recv_body(Sock, Filename, C) ->
     case file:open(Filename, [write, raw, compressed]) of
@@ -161,16 +176,18 @@ recv_chunk(Sock, IO) ->
     inet:setopts(Sock, [{packet, line}]),
     case gen_tcp:recv(Sock, 0) of
         {ok, Line} ->
-            case string:to_integer(binary_to_list(Line)) of
-                {error, _} ->
-                    gen_tcp:close(Sock),
-                    {error, chunk_failure};
-                {0, _} ->
+            case my_utils:hex_string_to_integer(binary_to_list(Line)) of
+                %{error, _} ->
+                %    gen_tcp:close(Sock),
+                %    {error, chunk_failure};
+                %{0, _} ->
+                0 ->
                     inet:setopts(Sock, [{packet, http}]),
                     recv_trailer(Sock),
                     gen_tcp:close(Sock),
                     ok;
-                {Len, _} ->
+                %{Len, _} ->
+                Len ->
                     inet:setopts(Sock, [{packet, raw}]),
                     case recv_chunk_data(Sock, IO, Len) of
                         ok ->
