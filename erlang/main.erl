@@ -1,57 +1,78 @@
 -module(main).
 -export([start/0]).
+
 -define(MAX_FETCHES, 100).
--define(LINES, all).
 -define(ROOT_DIR, "/tmp/download").
 -define(URL_FILE, "/home/mneumann/adbrite-urls.txt").
 
-%
-% The dispatch process catches exists from it's fetch processes.
-%
-dispatch() -> 
-  process_flag(trap_exit, true),
-  dispatch_loop().
+loop(0) -> ok;
+loop(Outstanding) ->
+    receive
+        {complete, Req, Reason} ->
+            %io:format("Request completed: ~p, ~p~n", [Req, Reason]),
+            loop(Outstanding-1)
+    end.
 
-dispatch_loop() ->
-  receive  
-    {req, URL} ->
-        try url_to_path(URL) of
-          {ok, Basename, URL2, {I,P,U}} -> 
-              Path = filename:join(?ROOT_DIR, Basename),
+loop(File, N, Outstanding) when (Outstanding >= ?MAX_FETCHES) ->
+    receive
+        {complete, Req, Reason} ->
+            %io:format("Request completed: ~p, ~p~n", [Req, Reason]),
+            loop(File, N, Outstanding-1)
+    end;
+
+loop(File, N, Outstanding) ->
+    receive
+        {complete, Req, Reason} ->
+            %io:format("Request completed: ~p, ~p~n", [Req, Reason]),
+            loop(File, N, Outstanding-1)
+    after 0 -> 
+        skip
+    end,
+
+    case io:get_line(File, '') of
+        eof -> 
+            loop(Outstanding);
+        Str ->
+            Y = post_request(my_utils:strip(Str)),
+            loop(File, N, Outstanding+Y)
+    end.
+
+resolve_host(Host) ->
+    case inet:gethostbyname(Host) of
+        {ok,{hostent,_,_,inet,4,[{A,B,C,D}|_]}} ->
+            string:join(lists:map(fun erlang:integer_to_list/1, [A,B,C,D]), ".");
+        _ ->
+            error
+    end.
+ 
+post_request(URL) ->
+    %io:format("~p~n", [URL]),
+    case url_to_path(URL) of
+        {ok, Filename, _URL2, {Host,Port,ReqURI}} -> 
+              Path = filename:join(?ROOT_DIR, Filename),
+              %io:format("~p~n", [Path]),
               filelib:ensure_dir(Path),
-              %io:format("~p~n", [URL2]), 
-              spawn_link(fun() ->
-                  % URL2
-                  %io:format("I am downloading: ~p ~p~n", [I, U]), 
-                  Res = http_client:download({I,P,I,U}, Path),
-                  io:format("download: ~p~n", [Res])
-              end),
-              dispatch_loop();
-          {error, _} ->
-              io:fwrite("Invalid URL: ~p~n", [URL]),
-              credit:put(credit, 1),
-              %io:format("Credits: ~p~n", [credit:cnt(credit)]),
-              dispatch_loop()
-        catch
-            _ ->
-                io:fwrite("WRONG: ~p~n", [URL])
-        end;
+              case resolve_host(Host) of
+                  error ->
+                      io:format("DNS Resolv failed: ~p~n", [Host]),
+                      0;
+                  IP ->
+                      fetcher ! {req, self(), {IP, Port, Host, ReqURI, Path}},
+                      1
+                  end;
+        _ ->
+              io:format("Invalid URL: ~p~n", [URL]),
+              0
+    end.
 
-    {'EXIT', _, _} ->
-        credit:put(credit, 1),
-        %io:format("Credits: ~p~n", [credit:cnt(credit)]),
-        dispatch_loop();
+start() ->
+    crypto:start(),
+    Pid = spawn(fun() -> fetch_manager:start(?MAX_FETCHES) end),
+    register(fetcher, Pid), 
+    {ok, File} = file:open(?URL_FILE, read),
+    loop(File, 0, 0).
 
-    {term} -> ok;
-
-    _ -> 
-      io:format("WTF-----------------------~n")
-  end.
-
-post(Line, Pid) ->
-  %io:format("~p~n", [Line]),
-  credit:get(credit, 1),
-  Pid ! {req, Line}. 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 digest(Bin) ->
   my_utils:binary_to_hex(crypto:sha(Bin)).
@@ -68,24 +89,3 @@ url_to_path(URL) ->
           {ok, filename:join(HostToks2 ++ [URLHash]), URL2, {Host, Port, Path ++ Query}};
       _ -> {error, invalid_url}
     end.
-
-start() ->
-  crypto:start(),
-  inets:start(),
-  http:set_options([{max_sessions, 1}, {max_pipeline_length, 1}]),
-  %process_flag(trap_exit, true),
-  credit:new(credit),
-  %io:format("Credit: ~p~n", [credit:cnt(credit)]),
-  credit:put(credit, ?MAX_FETCHES),
-  {ok, F} = file:open(?URL_FILE, read),
-  Pid = spawn(fun dispatch/0),
-  my_utils:each_line_with_index(F, 
-    fun(Line, I) -> 
-      io:format("LINE: ~p~n", [I]),
-      post(my_utils:strip(Line), Pid)
-    end, ?LINES),
-  io:format("Credits: ~p~n", [credit:cnt(credit)]),
-  credit:get(credit, ?MAX_FETCHES),
-  Pid ! {term}, 
-  io:format("READY~n"),
-  exit(0).
