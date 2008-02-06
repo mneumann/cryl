@@ -106,7 +106,7 @@ header({'Content-Length', CLen}, State) ->
 header({'Location', Location}, State) ->
     {ok, State#state{location = Location}};
 
-header({K,V}, State) ->
+header({_K,_V}, State) ->
     %io:format("~p: ~p~n", [K, V]),
     {ok, State}.
 

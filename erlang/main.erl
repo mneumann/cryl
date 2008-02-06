@@ -2,8 +2,8 @@
 -export([start/0]).
 -define(MAX_FETCHES, 100).
 -define(LINES, all).
--define(ROOT_DIR, "/tmp/fuckyou").
--define(URL_FILE, "/tmp/all").
+-define(ROOT_DIR, "/tmp/download").
+-define(URL_FILE, "/home/mneumann/adbrite-urls.txt").
 
 %
 % The dispatch process catches exists from it's fetch processes.
@@ -15,23 +15,31 @@ dispatch() ->
 dispatch_loop() ->
   receive  
     {req, URL} ->
-        case url_to_path(URL) of
-          {ok, Basename, URL2} -> 
+        try url_to_path(URL) of
+          {ok, Basename, URL2, {I,P,U}} -> 
               Path = filename:join(?ROOT_DIR, Basename),
               filelib:ensure_dir(Path),
               %io:format("~p~n", [URL2]), 
-              spawn_link(fun() -> fetcher:fetch(URL2, Path) end),
+              spawn_link(fun() ->
+                  % URL2
+                  %io:format("I am downloading: ~p ~p~n", [I, U]), 
+                  Res = http_client:download({I,P,I,U}, Path),
+                  io:format("download: ~p~n", [Res])
+              end),
               dispatch_loop();
           {error, _} ->
-              io:fwrite("Invalid URL: ~p~n", URL),
+              io:fwrite("Invalid URL: ~p~n", [URL]),
               credit:put(credit, 1),
-              io:format("Credits: ~p~n", [credit:cnt(credit)]),
+              %io:format("Credits: ~p~n", [credit:cnt(credit)]),
               dispatch_loop()
+        catch
+            _ ->
+                io:fwrite("WRONG: ~p~n", [URL])
         end;
 
     {'EXIT', _, _} ->
         credit:put(credit, 1),
-        io:format("Credits: ~p~n", [credit:cnt(credit)]),
+        %io:format("Credits: ~p~n", [credit:cnt(credit)]),
         dispatch_loop();
 
     {term} -> ok;
@@ -41,6 +49,7 @@ dispatch_loop() ->
   end.
 
 post(Line, Pid) ->
+  %io:format("~p~n", [Line]),
   credit:get(credit, 1),
   Pid ! {req, Line}. 
 
@@ -56,7 +65,7 @@ url_to_path(URL) ->
           HostToks2 = lists:reverse(lists:map(fun my_utils:filename_ensure/1, HostToks)),
           URL2 = "http://" ++ HostLow2 ++ ":" ++ integer_to_list(Port) ++ Path ++ Query, % normalize URL
           URLHash = digest(URL2),
-          {ok, filename:join(HostToks2 ++ [URLHash]), URL2};
+          {ok, filename:join(HostToks2 ++ [URLHash]), URL2, {Host, Port, Path ++ Query}};
       _ -> {error, invalid_url}
     end.
 
@@ -72,7 +81,7 @@ start() ->
   Pid = spawn(fun dispatch/0),
   my_utils:each_line_with_index(F, 
     fun(Line, I) -> 
-      %io:format("LINE: ~p~n", [I]),
+      io:format("LINE: ~p~n", [I]),
       post(my_utils:strip(Line), Pid)
     end, ?LINES),
   io:format("Credits: ~p~n", [credit:cnt(credit)]),

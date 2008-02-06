@@ -3,7 +3,8 @@
 %
 -module(my_utils).
 -export([binary_to_hex/1, filename_ensure/1, each_line/2, each_line/3,
-         each_line_with_index/2, each_line_with_index/3, strip/1]).
+         each_line_with_index/2, each_line_with_index/3, strip/1,
+         hex_string_to_integer/1]).
 
 %
 % Converts a number in the range of 0-15 to it's 
@@ -12,6 +13,14 @@
 hex_digit_chr(N) when (N >= 0)  and (N < 10) -> $0 + N;      
 hex_digit_chr(N) when (N >= 10) and (N < 16) -> $a - 10 + N;
 hex_digit_chr(_N) -> throw(invalid_hex_digit).
+
+%
+% Convert a character 
+%
+hex_chr_to_int(N) when (N >= $0) and (N =< $9) -> N - $0;
+hex_chr_to_int(N) when (N >= $A) and (N =< $F) -> 10 + N - $A;
+hex_chr_to_int(N) when (N >= $a) and (N =< $f) -> 10 + N - $a;
+hex_chr_to_int(_N) -> error. 
 
 %
 % Converts a Binary into a hexadecimal representation.
@@ -71,3 +80,13 @@ strip_leading([13|T]) -> strip_leading(T);
 strip_leading([9|T])  -> strip_leading(T);
 strip_leading([11|T]) -> strip_leading(T);
 strip_leading(L)      -> L.
+
+hex_string_to_integer(L) ->
+    hex_string_to_integer(L, 1, 0).
+
+hex_string_to_integer([], _Fac, Sum) -> Sum;
+hex_string_to_integer([C|T], Fac, Sum) ->
+    case hex_chr_to_int(C) of
+      error -> Sum;
+      N     -> hex_string_to_integer(T, Fac*16, Sum + N*Fac)   
+    end.
