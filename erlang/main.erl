@@ -1,36 +1,46 @@
 -module(main).
 -export([start/0]).
 
--define(MAX_FETCHES, 100).
+-define(MAX_CONNS, 1000).
+-define(MAX_OUTSTANDING, 10000).
 -define(ROOT_DIR, "/tmp/download").
--define(URL_FILE, "/home/mneumann/adbrite-urls.txt").
 
 request_completed(_Request, Reason) ->
     %io:format("Request completed: ~p, ~p~n", [Request, Reason]).
     io:format("~p~n", [Reason]).
 
+try_cleanup(0) -> 0;
+try_cleanup(Outstanding) ->
+    receive
+        {complete, Req, Reason} ->
+            request_completed(Req, Reason),
+            try_cleanup(Outstanding-1)
+    after 0 ->
+        Outstanding
+    end.
+
 cleanup(0) -> ok;
 cleanup(Outstanding) ->
+    io:format("cleanup[~p]~n", [Outstanding]),
     receive
         {complete, Req, Reason} ->
             request_completed(Req, Reason),
             cleanup(Outstanding-1)
     end.
 
-loop(File, N, Outstanding) when (Outstanding >= ?MAX_FETCHES) ->
-    receive
-        {complete, Req, Reason} ->
-            request_completed(Req, Reason),
-            loop(File, N, Outstanding-1)
-    end;
+loop(File, N, Outstanding) when (Outstanding >= ?MAX_OUTSTANDING) ->
+    cleanup(1),
+    loop(File, N, Outstanding-1);
 
 loop(File, N, Outstanding) ->
-    case io:get_line(File, '') of
+    Outstanding2 = try_cleanup(Outstanding),
+    case io:get_line('') of
         eof -> 
-            cleanup(Outstanding);
+            cleanup(Outstanding2);
         Str ->
+	    io:format("Line: ~p~n", [N]),
             Y = post_request(my_utils:strip(Str)),
-            loop(File, N, Outstanding+Y)
+            loop(File, N+1, Outstanding2+Y)
     end.
 
 resolve_host(Host) ->
@@ -70,10 +80,10 @@ post_request(URL) ->
 
 start() ->
     crypto:start(),
-    Pid = spawn(fun() -> fetch_manager:start(?MAX_FETCHES) end),
+    Pid = spawn(fun() -> fetch_manager:start(?MAX_CONNS) end),
     register(fetcher, Pid), 
-    {ok, File} = file:open(?URL_FILE, read),
-    loop(File, 0, 0).
+    loop(none, 0, 0),
+    exit(ok).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

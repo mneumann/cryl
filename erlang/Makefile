@@ -2,9 +2,10 @@ all: compile run
 
 clean:
 	rm -f *.beam *.dump
+	rm -rf /tmp/download
 
 compile:
 	erlc *.erl
 
 run:
-	erl -run main -noinput -noshell
+	erl -run main -noinput -noshell < /home/mneumann/top2
