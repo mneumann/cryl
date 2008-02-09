@@ -2,7 +2,7 @@
 -export([start/0]).
 
 -define(MAX_CONNS, 1000).
--define(MAX_OUTSTANDING, 10000).
+-define(MAX_OUTSTANDING, 1000).
 -define(ROOT_DIR, "/tmp/download").
 
 request_completed(_Request, Reason) ->
@@ -35,12 +35,15 @@ loop(File, N, Outstanding) when (Outstanding >= ?MAX_OUTSTANDING) ->
 loop(File, N, Outstanding) ->
     Outstanding2 = try_cleanup(Outstanding),
     case io:get_line('') of
-        eof -> 
-            cleanup(Outstanding2);
-        Str ->
+        Str when is_list(Str) ->
 	    io:format("Line: ~p~n", [N]),
             Y = post_request(my_utils:strip(Str)),
-            loop(File, N+1, Outstanding2+Y)
+            loop(File, N+1, Outstanding2+Y);
+        eof ->
+            cleanup(Outstanding2);
+        _ ->
+            io:format("ERROR get_line~n"),
+            cleanup(Outstanding2)
     end.
 
 resolve_host(Host) ->
