@@ -16,6 +16,7 @@
 require 'rev'
 require 'socket'
 require 'http11_client'
+require 'time'
 
 class HttpClient < Rev::IOWatcher
   include Socket::Constants
@@ -25,6 +26,7 @@ class HttpClient < Rev::IOWatcher
   HEADER_BLOCK_SIZE = 1024
   BODY_BLOCK_SIZE = 16 * HEADER_BLOCK_SIZE
   CONTENT_LENGTH = 'CONTENT_LENGTH'
+  TRANSFER_ENCODING = 'TRANSFER_ENCODING'
 
   #
   # Handler class. Write your own!  
@@ -47,6 +49,7 @@ class HttpClient < Rev::IOWatcher
     def produce_request
       "GET #{@request_uri} HTTP/1.1\r\n" \
       "Host: #{@host}\r\n"               \
+      "Date: #{Time.now.httpdate}\r\n"   \
       "Content-Length: 0\r\n"            \
       "User-Agent: Ruby/Cryl\r\n"        \
       "Connection: close\r\n\r\n"
@@ -119,6 +122,10 @@ class HttpClient < Rev::IOWatcher
           @remaining = nil
           if len = @header[CONTENT_LENGTH]
             @remaining = Integer(len)
+          end
+
+          if @header[TRANSFER_ENCODING]
+            STDERR.puts "TRANSFER" 
           end
           
           if @remaining

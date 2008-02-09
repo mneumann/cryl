@@ -71,10 +71,16 @@ class Scheduler
   end
 
   def run
+    empty_cnt = 0
     while true
-      @event_loop.run_once
+      @event_loop.run_nonblock
       step()
-      break if @event_loop.watchers.empty?
+      if @event_loop.watchers.empty?
+        break if empty_cnt > 2 
+        empty_cnt += 1
+      else
+        empty_cnt = 0
+      end
     end
   end
 
@@ -126,6 +132,13 @@ class Scheduler
 
   def dns_resolve(task)
     # TODO: test if the hostname is currently resolved. ignore for now!
+    task.ip = Socket.gethostbyname(task.http_url.host).last.unpack('C*').join('.') rescue nil
+    if task.ip
+      dns_complete(task)
+    else
+      dns_failed(task)
+    end
+=begin
     resolver = DnsResolver.new(task.http_url.host) {|ok, addr|
       if ok
         task.ip = addr
@@ -135,6 +148,7 @@ class Scheduler
       end
     }
     attach_job(resolver)
+=end
   end
 
   # 
