@@ -88,11 +88,7 @@ class HttpClient < Rev::IOWatcher
     @pos = 0
 
     @state = :connecting
-    begin
-      @socket.connect_nonblock(@sockaddr)
-      @state = :connected
-    rescue Errno::EINPROGRESS
-    end
+    on_writable() # connect
 
     super(@socket, 'rw') 
   end
@@ -167,6 +163,8 @@ class HttpClient < Rev::IOWatcher
     when :connecting
       begin
         @socket.connect_nonblock(@sockaddr)
+        @state = :connected
+      rescue Errno::EINPROGRESS
       rescue Errno::EISCONN
         @state = :connected
       rescue 
@@ -208,6 +206,6 @@ end
 
 if __FILE__ == $0
   evloop = Rev::Loop.new
-  HttpClient.new('127.0.0.1', 8081, HttpClient::Handler.new('localhost', '/test')).attach(evloop)
+  HttpClient.new('www.ntecs.de', 80, HttpClient::Handler.new('www.ntecs.de', '/')).attach(evloop)
   evloop.run
 end
