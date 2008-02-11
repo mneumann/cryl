@@ -6,7 +6,9 @@
 % Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
 %
 -module(fetch_manager).
--export([start/1]).
+-export([start/1, post_request/3]).
+
+-include("uri.hrl").
 -record(state, {connections, active_requests, queued_requests, max_conns}).
 -record(request, {requestor_pid, server_ip, port, host, request_uri, filename}).
 
@@ -21,17 +23,21 @@ initial_state(MaxConns) ->
         queued_requests = gb_trees:empty(),
         max_conns = MaxConns }.
 
+post_request(IP, HttpUri, Filename) ->
+    fetcher ! {req, self(), IP, HttpUri, Filename}.
+
 loop(State) ->
     receive
-        {req, Pid, {IP, Port, Host, ReqURI, Filename}} ->
+        {req, Pid, IP, HttpUri, Filename} ->
             % build request record
             R = #request{
                 requestor_pid = Pid,
                 server_ip = IP,
-                port = Port,
-                host = Host,
-                request_uri = ReqURI,
+                port = HttpUri#http_uri.port,
+                host = HttpUri#http_uri.host,
+                request_uri = uri:request_uri(HttpUri),
                 filename = Filename},
+
             case is_request_busy(R, State) of
                 true ->
                     % enqueue and continue

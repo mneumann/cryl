@@ -57,7 +57,7 @@ resolve_host(Host) ->
  
 post_request(URL) ->
     case uri:parse(URL) of
-        #http_uri{port = Port, host = Host}=HttpUri ->
+        #http_uri{host = Host}=HttpUri ->
             Filename = uri:to_filename(HttpUri, ?ROOT_DIR),
             case filelib:is_file(Filename) of
                 true ->
@@ -72,8 +72,7 @@ post_request(URL) ->
                             io:format("DNS Resolv failed: ~p~n", [Host]),
                             0;
                         IP ->
-                            fetcher ! {req, self(), 
-                                       {IP, Port, Host, uri:request_uri(HttpUri), Filename}},
+                            fetch_manager:post_request(IP, HttpUri, Filename),
                             1
                     end
             end;
