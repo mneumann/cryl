@@ -1,5 +1,6 @@
 -module(main).
 -export([start/0]).
+-include("uri.hrl").
 
 -define(MAX_CONNS, 1000).
 -define(MAX_OUTSTANDING, 1000).
@@ -55,9 +56,9 @@ resolve_host(Host) ->
     end.
  
 post_request(URL) ->
-    case url_to_path(URL) of
-        {ok, Basename, _URL2, {Host,Port,ReqURI}} -> 
-            Filename = filename:join(?ROOT_DIR, Basename),
+    case uri:parse(URL) of
+        #http_uri{port = Port, host = Host}=HttpUri ->
+            Filename = uri:to_filename(HttpUri, ?ROOT_DIR),
             case filelib:is_file(Filename) of
                 true ->
                     % file already exists. skip it
@@ -72,7 +73,7 @@ post_request(URL) ->
                             0;
                         IP ->
                             fetcher ! {req, self(), 
-                                       {IP, Port, Host, ReqURI, Filename}},
+                                       {IP, Port, Host, uri:request_uri(HttpUri), Filename}},
                             1
                     end
             end;
@@ -87,21 +88,3 @@ start() ->
     register(fetcher, Pid), 
     loop(none, 0, 0),
     exit(ok).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-digest(Bin) ->
-  my_utils:binary_to_hex(crypto:sha(Bin)).
-
-url_to_path(URL) ->
-    case http_uri:parse(URL) of 
-      {http, [], Host, Port, Path, Query} -> 
-          HostLow = string:to_lower(Host),
-          HostToks = lists:map(fun string:strip/1, string:tokens(HostLow, ".")),
-          HostLow2 = string:join(HostToks, "."),
-          HostToks2 = lists:reverse(lists:map(fun my_utils:filename_ensure/1, HostToks)),
-          URL2 = "http://" ++ HostLow2 ++ ":" ++ integer_to_list(Port) ++ Path ++ Query, % normalize URL
-          URLHash = digest(URL2),
-          {ok, filename:join(HostToks2 ++ [URLHash]), URL2, {Host, Port, Path ++ Query}};
-      _ -> {error, invalid_url}
-    end.
