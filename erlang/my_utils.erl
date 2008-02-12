@@ -4,7 +4,7 @@
 -module(my_utils).
 -export([binary_to_hex/1, filename_ensure/1, each_line/2, each_line/3,
          each_line_with_index/2, each_line_with_index/3, strip/1,
-         hex_string_to_integer/1, max/2, min/2]).
+         hex_string_to_integer/1, max/2, min/2, chomp/1]).
 
 %
 % Converts a number in the range of 0-15 to it's 
@@ -109,3 +109,17 @@ max(_A, B) -> B.
 
 min(A,  B) when (A =< B) -> A; 
 min(_A, B) -> B.
+
+%
+% Removes the last character if and only if it is a newline
+% character
+%
+chomp([]) -> [];
+chomp([H]=L) ->
+    case H of
+        13 -> [];
+        10 -> [];
+        _  -> L
+    end;
+chomp([H|T]) ->
+    [H|chomp(T)].
