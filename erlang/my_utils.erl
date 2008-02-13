@@ -4,7 +4,7 @@
 -module(my_utils).
 -export([binary_to_hex/1, filename_ensure/1, each_line/2, each_line/3,
          each_line_with_index/2, each_line_with_index/3, strip/1,
-         hex_string_to_integer/1, max/2, min/2, chomp/1]).
+         hex_string_to_integer/1, max/2, min/2, chomp/1, resolve_host/1]).
 
 %
 % Converts a number in the range of 0-15 to it's 
@@ -123,3 +123,15 @@ chomp([H]=L) ->
     end;
 chomp([H|T]) ->
     [H|chomp(T)].
+
+%
+% Resolves a domain name via DNS into an IPv4 address
+% or returns error.
+%
+resolve_host(Host) ->
+    case inet:gethostbyname(Host) of
+        {ok,{hostent,_,_,inet,4,[IP|_]}} ->
+            IP;
+        _ ->
+            error
+    end.

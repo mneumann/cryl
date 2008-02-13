@@ -6,7 +6,7 @@
 % Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
 %
 -module(fetch_manager).
--export([start/1, post_request/3]).
+-export([start/1, post_request/4]).
 
 -include("uri.hrl").
 -record(state, {connections, active_requests, queued_requests, max_conns}).
@@ -23,8 +23,8 @@ initial_state(MaxConns) ->
         queued_requests = gb_trees:empty(),
         max_conns = MaxConns }.
 
-post_request(IP, HttpUri, Filename) ->
-    fetcher ! {req, self(), IP, HttpUri, Filename}.
+post_request(FetcherPid, IP, HttpUri, Filename) ->
+    FetcherPid ! {req, self(), IP, HttpUri, Filename}.
 
 loop(State) ->
     receive
