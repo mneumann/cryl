@@ -52,6 +52,10 @@ open_and_start(RootDir) ->
  
 submit(Entry, #worker{worker_pid = Pid}) ->
     submit(Entry, Pid);
+
+submit(Entry, Pid) when is_atom(Pid) ->
+    submit(Entry, whereis(Pid));
+
 submit(Entry, Pid) ->
     Pid ! {req, self(), Entry},
     receive
