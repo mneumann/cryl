@@ -4,7 +4,7 @@
 -define(URL_FILE, "/home/mneumann/adbrite-urls.txt").
 
 create() ->
-    worker:create(?ROOT_DIR, 213, 1000, 10000).  
+    worker:create(?ROOT_DIR, 13, 1000, 10000).  
 
 start() ->
     crypto:start(),

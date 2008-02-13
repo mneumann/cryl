@@ -1,8 +1,7 @@
 all: compile run
 
 clean:
-	rm -f *.beam *.dump
-	rm -rf /tmp/download ./work
+	rm -rf *.beam *.dump /tmp/cryl
 
 compile:
 	erlc *.erl
