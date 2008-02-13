@@ -1,6 +1,6 @@
 -module(distribute).
 -include("uri.hrl").
--export([distribute/2]).
+-export([distribute/2, submit/2, get_worker/1, get_workers/1]).
 
 distribute(_HttpUri, []) ->
     {error, no_nodes};
@@ -15,4 +15,23 @@ distribute(HttpUri, ListOfNodes) ->
             % as list is already reversed, we just take T.
             N = erlang:phash(T, length(ListOfNodes)),
             {ok, lists:nth(N, ListOfNodes)}
+    end.
+
+get_worker(Node) ->
+    rpc:call(Node, erlang, whereis, [worker]).
+
+get_workers(ListOfNodes) ->
+    lists:map(fun get_worker/1, ListOfNodes).
+
+submit(Entry, ListOfWorkers) ->
+    case uri:parse(Entry) of
+        #http_uri{} = HttpUri ->
+            case distribute(HttpUri, ListOfWorkers) of
+                {ok, WorkerPid} ->
+                    worker:submit(Entry, WorkerPid);
+                Err ->
+                    Err
+            end;
+        Err ->
+            Err
     end.
