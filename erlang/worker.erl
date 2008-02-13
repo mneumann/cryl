@@ -8,7 +8,10 @@
 %
 
 -module(worker).
--export([create/4, open/1, open_and_start/1, start/1, submit/2, submit/1]).
+-export([create/4, open/1, open_and_start/1, start/1,
+         submit/2, submit/1,
+         bulk_start/0, bulk_start/1, bulk_stop/0, bulk_stop/1,
+         bulk_submit/1, bulk_submit/2]).
 -record(worker, {file_queue, max_conns, max_outstanding, outstanding,
                  fetch_manager_pid, worker_pid, root_dir}).
 -define(WAIT_INF, 1000000). % 1000 seconds
@@ -66,6 +69,51 @@ submit(Entry, Pid) ->
         {req_confirm, Pid, Entry, Reason} -> Reason
     end.
 
+bulk_start() ->
+    bulk_start(worker).
+
+bulk_start(#worker{worker_pid = Pid}) ->
+    bulk_start(Pid);
+
+bulk_start(Pid) when is_atom(Pid) ->
+    bulk_start(whereis(Pid));
+
+bulk_start(Pid) ->
+    Pid ! {bulk_start, self()},
+    receive
+        {bulk_start_confirm, Pid, Reason} -> Reason
+    end.
+
+bulk_stop() ->
+    bulk_stop(worker).
+
+bulk_stop(#worker{worker_pid = Pid}) ->
+    bulk_stop(Pid);
+
+bulk_stop(Pid) when is_atom(Pid) ->
+    bulk_stop(whereis(Pid));
+
+bulk_stop(Pid) ->
+    Pid ! {bulk_stop, self()},
+    receive
+        {bulk_stop_confirm, Pid, N} -> N
+    end.
+
+bulk_submit(Entry) ->
+    bulk_submit(Entry, worker).
+
+bulk_submit(Entry, #worker{worker_pid = Pid}) ->
+    bulk_submit(Entry, Pid);
+
+bulk_submit(Entry, Pid) when is_atom(Pid) ->
+    bulk_submit(Entry, whereis(Pid));
+
+bulk_submit(Entry, Pid) ->
+    Pid ! {bulk_req, self(), Entry},
+    receive
+        {bulk_req_confirm, Pid, Entry, Reason} -> Reason 
+    end.
+
 %--------------------------------------------------------------------
 %--------------------------------------------------------------------
 
@@ -81,7 +129,7 @@ loop_empty_queue(#worker{outstanding = Outst} = Worker) ->
         0 ->
             % nothing happened (timeout)
             loop_empty_queue(Worker);
-        1 ->
+        _ ->
             % request enqueued into file queue
             loop(Worker)
     end.
@@ -130,6 +178,9 @@ check_messages(Worker, Wait) ->
             Ret = file_queue:enqueue(Entry, Worker#worker.file_queue),
             Pid ! {req_confirm, self(), Entry, Ret},
             1;
+        {bulk_start, Pid} ->
+            Pid ! {bulk_start_confirm, self(), ok},
+            bulk_loop(Worker, Pid, 0);
         {complete, Req, Reason} ->
             % receive a completion message from the fetch manager.
             % TODO: include Pid of fetcher in the message.
@@ -137,6 +188,28 @@ check_messages(Worker, Wait) ->
             -1
     after Wait ->
         0
+    end.
+
+bulk_cleanup(Worker, Pid, N) ->
+    receive
+        {bulk_req, Pid, Entry} ->
+             Ret = file_queue:enqueue(Entry, Worker#worker.file_queue),
+             Pid ! {bulk_req_confirm, self(), Entry, Ret},
+             bulk_cleanup(Worker, Pid, N+1)
+    after 0 ->
+        N
+    end.
+
+bulk_loop(Worker, Pid, N) ->
+    receive
+        {bulk_req, Pid, Entry} ->
+             Ret = file_queue:enqueue(Entry, Worker#worker.file_queue),
+             Pid ! {bulk_req_confirm, self(), Entry, Ret},
+             bulk_loop(Worker, Pid, N+1);
+        {bulk_stop, Pid} ->
+            N2 = bulk_cleanup(Worker, Pid, N),
+            Pid ! {bulk_stop_confirm, self(), N2},
+            N2
     end.
 
 %

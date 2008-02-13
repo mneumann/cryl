@@ -1,6 +1,6 @@
 -module(distribute).
 -include("uri.hrl").
--export([distribute/2, submit/2, get_worker/1, get_workers/1]).
+-export([distribute/2, submit/2, submit/3, get_worker/1, get_workers/1]).
 
 distribute(_HttpUri, []) ->
     {error, no_nodes};
@@ -24,11 +24,14 @@ get_workers(ListOfNodes) ->
     lists:map(fun get_worker/1, ListOfNodes).
 
 submit(Entry, ListOfWorkers) ->
+    submit(Entry, ListOfWorkers, fun(Entry, Pid) -> worker:submit(Entry, Pid) end).
+
+submit(Entry, ListOfWorkers, Fun) ->
     case uri:parse(Entry) of
         #http_uri{} = HttpUri ->
             case distribute(HttpUri, ListOfWorkers) of
                 {ok, WorkerPid} ->
-                    worker:submit(Entry, WorkerPid);
+                    Fun(Entry, WorkerPid);
                 Err ->
                     Err
             end;
