@@ -139,7 +139,8 @@ post_request(Worker, UrlStr) ->
     URL = my_utils:strip(UrlStr),
     case uri:parse(URL) of
         #http_uri{host = Host}=HttpUri ->
-            Filename = uri:to_filename(HttpUri, Worker#worker.root_dir),
+            FileRoot = filename:join(Worker#worker.root_dir, "files"),
+            Filename = uri:to_filename(HttpUri, FileRoot),
             case filelib:is_file(Filename) of
                 true ->
                     % file already exists. skip it
