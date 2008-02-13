@@ -8,7 +8,7 @@
 %
 
 -module(worker).
--export([create/4, open/1, open_and_start/1, start/1, submit/2]).
+-export([create/4, open/1, open_and_start/1, start/1, submit/2, submit/1]).
 -record(worker, {file_queue, max_conns, max_outstanding, outstanding,
                  fetch_manager_pid, worker_pid, root_dir}).
 -define(WAIT_INF, 1000000). % 1000 seconds
@@ -45,11 +45,15 @@ start(Worker) ->
     FetcherPid = spawn(fun() -> fetch_manager:start(Worker#worker.max_conns) end),
     W = Worker#worker{fetch_manager_pid = FetcherPid},
     Pid = spawn(fun() -> loop(W) end),
+    register(worker, Pid),
     W#worker{worker_pid = Pid}.
 
 open_and_start(RootDir) ->
     start(open(RootDir)).
  
+submit(Entry) ->
+    submit(Entry, worker).
+
 submit(Entry, #worker{worker_pid = Pid}) ->
     submit(Entry, Pid);
 
