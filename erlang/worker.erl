@@ -125,7 +125,7 @@ check_messages(Worker, Wait) ->
         {complete, Req, Reason} ->
             % receive a completion message from the fetch manager.
             % TODO: include Pid of fetcher in the message.
-            io:format("Request ~p completed with ~p~n", [Req, Reason]),
+            error_logger:info_msg("Request ~p completed with ~p~n", [Req, Reason]),
             -1
     after Wait ->
         0
@@ -144,7 +144,7 @@ post_request(Worker, UrlStr) ->
             case filelib:is_file(Filename) of
                 true ->
                     % file already exists. skip it
-                    io:format("SKIP: ~p~n", [Filename]),
+                    error_logger:info_msg("Skip file ~p~n", [Filename]),
                     0;
                 false ->
                     filelib:ensure_dir(Filename),
@@ -153,7 +153,7 @@ post_request(Worker, UrlStr) ->
                     file:write_file(Filename, ""),
                     case my_utils:resolve_host(Host) of
                         error ->
-                            io:format("ERROR: DNS resolve failed for: ~p~n", [Host]),
+                            error_logger:error_msg("DNS resolve failed for ~p~n", [Host]),
                             0;
                         IP ->
                             fetch_manager:post_request(Worker#worker.fetch_manager_pid,
@@ -162,6 +162,6 @@ post_request(Worker, UrlStr) ->
                     end
             end;
         _ ->
-            io:format("ERROR: Invalid URL: ~p~n", [URL]),
+            error_logger:error_msg("Invalid URL ~p~n", [URL]),
             0
     end.

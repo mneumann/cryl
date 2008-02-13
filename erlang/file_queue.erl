@@ -92,7 +92,7 @@ open_queue_file(FileQueue, Queue, [Name|T]) ->
         {ok, F} ->
             {FullName, F};
         _ ->
-            io:format("ERROR: Couldn't open file ~s~n", [FullName]),
+            error_logger:error_msg("Coudn't open queue file ~p. Delete anyway.~n", [FullName]),
             file:delete(FullName),
             open_queue_file(FileQueue, Queue, T)
     end.
