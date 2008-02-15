@@ -28,6 +28,17 @@ class HttpClient < Rev::IOWatcher
   CONTENT_LENGTH = 'CONTENT_LENGTH'
   TRANSFER_ENCODING = 'TRANSFER_ENCODING'
 
+  class HttpHash < Hash
+    attr_reader :http_reason, :http_status, :http_version
+    attr_reader :http_body, :http_chunk_size, :last_chunk
+
+    def inspect
+      h = {}; h.update(self)
+      instance_variables.each{|k| h[k] = instance_variable_get(k) }
+      h.inspect
+    end
+  end
+
   #
   # Handler class. Write your own!  
   #
@@ -59,6 +70,7 @@ class HttpClient < Rev::IOWatcher
     # Called once when the header was completely parsed.
     #
     def header(hash)
+      p hash
     end
 
     #
@@ -83,7 +95,8 @@ class HttpClient < Rev::IOWatcher
     @sockaddr = Socket.sockaddr_in(@port, @ip_addr)
 
     @http_parser = Rev::HttpClientParser.new
-    @header = Hash.new
+    @header = HttpHash.new
+
     @buffer = ""
     @pos = 0
 
