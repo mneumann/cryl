@@ -77,6 +77,7 @@ class HttpClient < Rev::IOWatcher
     # Called each time a part of the body is received.  
     #
     def body(data)
+      p data
     end
 
     #
@@ -125,9 +126,6 @@ class HttpClient < Rev::IOWatcher
           @http_parser.finish
           @handler.header(@header)
 
-          # Remove Header from buffer
-          @buffer = @buffer[@pos..-1] || ""
-
           @remaining = nil
           if len = @header[CONTENT_LENGTH]
             @remaining = Integer(len)
@@ -138,10 +136,11 @@ class HttpClient < Rev::IOWatcher
           end
           
           if @remaining
-            @handler.body(@buffer[0, @remaining])  
-            @remaining -= @buffer.size
+            partial_body = @buffer[@pos, @remaining]
+            @handler.body(partial_body)  
+            @remaining -= partial_body.size
           else
-            @handler.body(@buffer)
+            @handler.body(@buffer[@pos..-1])
           end
 
           # We don't need the buffer any more
@@ -161,9 +160,13 @@ class HttpClient < Rev::IOWatcher
         else
           error(:not_enough_data)
         end
-      elsif data = @socket.read_nonblock([BODY_BLOCK_SIZE, @remaining].compact.min)
-        @handler.body(data)
-        success() if complete?
+      else
+        sz = BODY_BLOCK_SIZE 
+        sz = @remaining if @remaining and @remaining < sz
+        if data = @socket.read_nonblock(sz)
+          @handler.body(data)
+          success() if complete?
+        end
       end
     end
   rescue => e
