@@ -96,18 +96,19 @@ class RevSocket < Rev::IOWatcher
       data = @socket.read_nonblock(BLOCK_SIZE)
     rescue
       on_error(:read_failure)
+      return
     end
 
     if data and data.size > 0
       @read_buffer.append(data)
-      on_read(@read_buffer)
+      on_read()
     end
   end
 
   def on_connect()
   end
 
-  def on_read(read_buffer)
+  def on_read()
   end
 
   def on_close()
@@ -132,8 +133,8 @@ if __FILE__ == $0
     def on_connect
       self.write "GET / HTTP/1.0\r\n\r\n"
     end
-    def on_read(buf)
-      puts buf.to_str
+    def on_read()
+      puts @read_buffer.to_str
     end
   end
 
