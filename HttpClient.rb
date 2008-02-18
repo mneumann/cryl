@@ -6,31 +6,39 @@
 #
 # TODO:
 #
-#   * Implement Chunk Encoding
 #   * Check HTTP return code (200)
 #   * Redirects
 #
 # Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
 #
 
-require 'rev'
-require 'socket'
+require 'RevSocket'
 require 'http11_client'
 require 'time'
 
-class HttpClient < Rev::IOWatcher
-  include Socket::Constants
-
-  attr_reader :state
-
-  HEADER_BLOCK_SIZE = 1024
-  BODY_BLOCK_SIZE = 16 * HEADER_BLOCK_SIZE
+class HttpClient < RevSocket
   CONTENT_LENGTH = 'CONTENT_LENGTH'
   TRANSFER_ENCODING = 'TRANSFER_ENCODING'
 
   class HttpHash < Hash
-    attr_reader :http_reason, :http_status, :http_version
-    attr_reader :http_body, :http_chunk_size, :last_chunk
+    attr_accessor :http_reason, :http_status, :http_version
+    attr_accessor :http_body, :http_chunk_size, :last_chunk
+
+    def chunk_size
+      @chunk_size ||= @http_chunk_size ? @http_chunk_size.to_i(16) : 0
+    end
+
+    def clear_chunk_size
+      @chunk_size = @http_chunk_size = nil
+    end
+
+    def content_length
+      Integer(self[CONTENT_LENGTH]) rescue nil
+    end
+
+    def chunked_encoding?
+      self[TRANSFER_ENCODING] =~ /chunked/i
+    end
 
     def inspect
       h = {}; h.update(self)
@@ -39,189 +47,141 @@ class HttpClient < Rev::IOWatcher
     end
   end
 
-  #
-  # Handler class. Write your own!  
-  #
-  class Handler
-
-    def initialize(host, request_uri)
-      @host, @request_uri = host, request_uri
-    end
-
-    #
-    # Is called in case of an error.
-    #
-    def error(reason)
-    end
-
-    #
-    # Produces the HTTP request (returns a String)
-    #
-    def produce_request
-      "GET #{@request_uri} HTTP/1.1\r\n" \
-      "Host: #{@host}\r\n"               \
-      "Date: #{Time.now.httpdate}\r\n"   \
-      "Content-Length: 0\r\n"            \
-      "User-Agent: Ruby/Cryl\r\n"        \
-      "Connection: close\r\n\r\n"
-    end
-
-    #
-    # Called once when the header was completely parsed.
-    #
-    def header(hash)
-      p hash
-    end
-
-    #
-    # Called each time a part of the body is received.  
-    #
-    def body(data)
-      p data
-    end
-
-    #
-    # Called once at the end when everything was fine. 
-    #
-    def success
-    end
-
-  end
-
-  def initialize(ip_addr, port, handler)
-    @ip_addr, @port = ip_addr, port
-    @handler = handler
-
-    @socket = Socket.new(AF_INET, SOCK_STREAM, 0)
-    @sockaddr = Socket.sockaddr_in(@port, @ip_addr)
-
-    @http_parser = Rev::HttpClientParser.new
+  def initialize(ip_addr, port)
+    @parser = Rev::HttpClientParser.new
+    @parser_pos = 0
     @header = HttpHash.new
-
-    @buffer = ""
-    @pos = 0
-
-    @state = :connecting
-    on_writable() # connect
-
-    super(@socket, 'rw') 
+    @state = :read_header
+    super(ip_addr, port)
   end
 
-  def on_readable
-    case @state
-    when :wait_for_header
-      if @socket.eof?
-        error(:not_enough_data)
-      elsif data = @socket.read_nonblock(HEADER_BLOCK_SIZE)
-        @buffer << data
+  def send_request(host, request_uri)
+    str = 
+    "GET #{request_uri} HTTP/1.1\r\n" \
+    "Host: #{host}\r\n"               \
+    "Date: #{Time.now.httpdate}\r\n"   \
+    "Content-Length: 0\r\n"            \
+    "User-Agent: Ruby/Cryl\r\n"        \
+    "Connection: close\r\n\r\n"
+    write(str)
+  end
 
-        begin
-          @pos = @http_parser.execute(@header, @buffer, @pos)
-        rescue Rev::HttpClientParserError
-          error(:header_parse_error)
-          return
-        end
+  def on_close
+    @parser.finish
+    super
+  end
 
-        if @http_parser.finished?
-          @http_parser.finish
-          @handler.header(@header)
+  def on_read_header
+    return false unless http_parse()
 
-          @remaining = nil
-          if len = @header[CONTENT_LENGTH]
-            @remaining = Integer(len)
-          end
-
-          if @header[TRANSFER_ENCODING]
-            STDERR.puts "TRANSFER" 
-          end
-          
-          if @remaining
-            partial_body = @buffer[@pos, @remaining]
-            @handler.body(partial_body)  
-            @remaining -= partial_body.size
-          else
-            @handler.body(@buffer[@pos..-1])
-          end
-
-          # We don't need the buffer any more
-          @buffer = nil
-
-          if complete?
-            success()
-          else
-            @state = :wait_for_data
-          end
-        end
-      end
-    when :wait_for_data
-      if @socket.eof?
-        if complete?
-          success()
+    # TODO:
+    # check request
+    #
+    @store_into = open_store()
+    
+    @state = 
+      if @header.chunked_encoding?
+        :read_chunk_header
+      elsif @bytes_remaining = @header.content_length
+        if @bytes_remaining <= 0
+          :complete
         else
-          error(:not_enough_data)
+          :read_body
         end
       else
-        sz = BODY_BLOCK_SIZE 
-        sz = @remaining if @remaining and @remaining < sz
-        if data = @socket.read_nonblock(sz)
-          @handler.body(data)
-          success() if complete?
-        end
+        :read_body_until_close
       end
-    end
-  rescue => e
-    STDERR.puts "unexpected_error: #{e}"
-    error(:unexpected_error)
+      
+    return true
   end
 
-  def on_writable
-    case @state
-    when :connecting
-      begin
-        @socket.connect_nonblock(@sockaddr)
-        @state = :connected
-      rescue Errno::EINPROGRESS
-      rescue Errno::EISCONN
-        @state = :connected
-      rescue 
-        error(:connection_failed)
-      end
-    when :connected 
-      request = @handler.produce_request
-      if @socket.write(request) != request.size
-        error(:write_not_completed) 
+  def on_read_body_until_close
+    @read_buffer.write_to(@store_into) if @store_into
+    false
+  end
+
+  def on_read_body
+    read_bytes_remaining(:complete)
+  end
+
+  def on_read_chunk_trailer
+    # TODO
+    on_complete()
+  end
+
+  def on_read_chunk_header
+    @header.clear_chunk_size
+    return false unless http_parse()
+
+    @bytes_remaining = @header.chunk_size
+    @state =
+      if @bytes_remaining == 0
+        :read_chunk_trailer
       else
-        @state = :wait_for_header
+        :read_chunk
       end
+
+    true
+  end
+
+  def on_read_chunk
+    read_bytes_remaining(:read_chunk_header)
+  end
+
+  def on_read
+    return false if @read_buffer.empty?
+    #while send((c="on_#{@state}"; p c; c)); end
+    while send("on_#{@state}"); end
+  end
+
+  def on_complete
+    on_close()
+    @store_into.close if @store_into
+    false
+  end
+
+  def open_store
+    STDOUT
+    #File.open('/tmp/output.abc', 'w+')
+  end
+
+  def read_bytes_remaining(complete_state)
+    str = @read_buffer.read(@bytes_remaining)
+    @store_into.write(str) if @store_into
+    @bytes_remaining -= str.size
+    if @bytes_remaining <= 0
+      @state = complete_state
+      true
+    else
+      false
     end
-  rescue => e
-    STDERR.puts "unexpected_error: #{e}"
-    error(:unexpected_error)
   end
 
-  private
+  def http_parse
+    begin
+      # FIXME .to_str is slow!
+      @parser_pos = @parser.execute(@header, @read_buffer.to_str, @parser_pos)
+    rescue Rev::HttpClientParserError
+      on_error(:http_parse_error)
+      return false
+    end
 
-  def complete?
-    (@remaining and @remaining <= 0) or (@remaining.nil? and @socket.eof?)
+    if @parser.finished?
+      @read_buffer.read(@parser_pos)
+      @parser_pos = 0
+      @parser.reset
+      true
+    else
+      false
+    end
   end
 
-  def success
-    @state = :completed
-    @socket.close
-    detach()
-    @handler.success()
-  end
-
-  def error(reason=nil)
-    @socket.close unless @state == :connecting
-    @state = :error
-    detach()
-    @handler.error(reason)
-  end
 end
 
 if __FILE__ == $0
   evloop = Rev::Loop.new
-  HttpClient.new('www.ntecs.de', 80, HttpClient::Handler.new('www.ntecs.de', '/')).attach(evloop)
+  c = HttpClient.new('www.ntecs.de', 80)
+  c.send_request('www.ntecs.de', '/')
+  c.attach(evloop)
   evloop.run
 end
