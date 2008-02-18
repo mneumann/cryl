@@ -40,7 +40,7 @@ class RevSocket < Rev::IOWatcher
       end
     end
   rescue => e
-    STDERR.puts "unexpected_error: #{e}"
+    STDERR.puts "unexpected_error: #{e} / #{$@}"
     on_error(:unexpected_error)
   end
 
@@ -120,11 +120,11 @@ class RevSocket < Rev::IOWatcher
   end
 
   def cleanup
-    @socket.close unless @connected
+    @socket.close if @connected
     @connected = false
     @read_buffer.clear
     @write_buffer.clear
-    detach()
+    detach() if attached?
   end
 end
 

@@ -47,10 +47,11 @@ class HttpClient < RevSocket
     end
   end
 
-  def initialize(ip_addr, port)
+  def initialize(ip_addr, port, filename)
     @parser = Rev::HttpClientParser.new
     @parser_pos = 0
     @header = HttpHash.new
+    @filename = filename
     @state = :read_header
     super(ip_addr, port)
   end
@@ -67,11 +68,15 @@ class HttpClient < RevSocket
   end
 
   def on_close
-    @parser.finish
     super
+    if @state == :read_body_until_close
+      on_success()
+    else
+      on_error(:premature_eof)
+    end
   end
 
-  def on_read_header
+  def handle_read_header
     return false unless http_parse()
 
     # TODO:
@@ -84,7 +89,7 @@ class HttpClient < RevSocket
         :read_chunk_header
       elsif @bytes_remaining = @header.content_length
         if @bytes_remaining <= 0
-          :complete
+          :success
         else
           :read_body
         end
@@ -95,21 +100,22 @@ class HttpClient < RevSocket
     return true
   end
 
-  def on_read_body_until_close
+  def handle_read_body_until_close
     @read_buffer.write_to(@store_into) if @store_into
     false
   end
 
-  def on_read_body
-    read_bytes_remaining(:complete)
+  def handle_read_body
+    read_bytes_remaining(:success)
   end
 
-  def on_read_chunk_trailer
+  def handle_read_chunk_trailer
     # TODO
-    on_complete()
+    on_success()
+    false
   end
 
-  def on_read_chunk_header
+  def handle_read_chunk_header
     @header.clear_chunk_size
     return false unless http_parse()
 
@@ -124,25 +130,33 @@ class HttpClient < RevSocket
     true
   end
 
-  def on_read_chunk
+  def handle_read_chunk
     read_bytes_remaining(:read_chunk_header)
+  end
+
+  def handle_success
+    on_success()
+    false
   end
 
   def on_read
     return false if @read_buffer.empty?
-    #while send((c="on_#{@state}"; p c; c)); end
-    while send("on_#{@state}"); end
+    while send("handle_#{@state}"); end
   end
 
-  def on_complete
-    on_close()
+  def on_success
+    cleanup()
+  end
+
+  def cleanup
+    @parser.finish
     @store_into.close if @store_into
-    false
+    @store_into = nil
+    super
   end
 
   def open_store
-    STDOUT
-    #File.open('/tmp/output.abc', 'w+')
+    File.open(@filename, "w+")
   end
 
   def read_bytes_remaining(complete_state)
@@ -180,7 +194,7 @@ end
 
 if __FILE__ == $0
   evloop = Rev::Loop.new
-  c = HttpClient.new('www.ntecs.de', 80)
+  c = HttpClient.new('www.ntecs.de', 80, "/tmp/downloadit")
   c.send_request('www.ntecs.de', '/')
   c.attach(evloop)
   evloop.run
