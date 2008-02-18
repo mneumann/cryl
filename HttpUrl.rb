@@ -6,11 +6,33 @@
 # Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
 #
 class HttpUrl
+
   attr_accessor :host, :port, :path, :query, :original_url
+  attr_writer :ip
 
   require 'uri'
   require 'cgi'
   require 'digest/sha1'
+  require 'socket'
+
+  class << self
+    attr_accessor :dns_cache
+
+    def dns_resolve(host)
+      if @dns_cache 
+        h, ip = @dns_cache.get(host)
+      else
+        h = nil
+      end
+
+      if h != host
+        ip = Socket.gethostbyname(host).last.unpack('C*').join('.') rescue nil
+        @dns_cache.put([host, ip]) if @dns_cache
+      end
+
+      return ip
+    end
+  end
 
   def self.parse(href, base_url=nil)
     return nil if href.nil?
@@ -133,6 +155,12 @@ class HttpUrl
 
   def host_ip_addr?
     @host =~ /^\d+[.]\d+[.]\d+[.]\d+$/ ? true : false
+  end
+
+  def ip
+    return @ip if @ip
+    return @ip = @host if host_ip_addr?
+    @ip = HttpUrl.dns_resolve(@host)
   end
 
   def to_filename
