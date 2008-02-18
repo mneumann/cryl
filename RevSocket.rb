@@ -13,12 +13,15 @@ class RevSocket < Rev::IOWatcher
   BLOCK_SIZE = 16 * 1024
 
   attr_reader :socket
+  attr_reader :read_buffer, :write_buffer
 
   def initialize(ip_addr, port)
     @ip_addr, @port = ip_addr, port
     @socket = Socket.new(AF_INET, SOCK_STREAM, 0)
     @sockaddr = Socket.sockaddr_in(@port, @ip_addr)
     @connected = false
+    @read_buffer = Rev::Buffer.new 
+    @write_buffer = Rev::Buffer.new
 
     on_writeable() # connect
     super(@socket, 'rw') 
@@ -68,7 +71,6 @@ class RevSocket < Rev::IOWatcher
   #
   
   def write(data)
-    @write_buffer ||= Rev::Buffer.new 
     @write_buffer.append(data)
   end
 
@@ -77,7 +79,7 @@ class RevSocket < Rev::IOWatcher
   protected
 
   def on_can_write()
-    if @write_buffer and not @write_buffer.empty?
+    unless @write_buffer.empty?
       begin
         @write_buffer.write_to(@socket) 
       rescue
@@ -87,7 +89,6 @@ class RevSocket < Rev::IOWatcher
   end
 
   def on_can_read()
-    @read_buffer ||= Rev::Buffer.new 
     #
     # FIXME: use @read_buffer.read_from(@socket).
     #
