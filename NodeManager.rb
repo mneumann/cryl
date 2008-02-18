@@ -6,6 +6,7 @@
 class NodeManager
   require 'fileutils'
   require 'digest/sha1'
+  require 'HttpUrl'
 
   #
   # Each node has it's own directory root in which it stores several
@@ -14,7 +15,7 @@ class NodeManager
   #
   attr_reader :root_dir
 
-  def initialize(root_dir, num_queues=213)
+  def initialize(root_dir, num_queues=61)
     @num_queues = num_queues
     @root_dir = File.expand_path(root_dir)
 
@@ -105,6 +106,31 @@ class NodeManager
       end
     end
     return nil # all queues are empty
+  end
+
+  #
+  # Returns the next HttpUrl that is neither invalid nor already
+  # fetched. If there are no more URLs, it returns +nil+.
+  #
+  def get_next_url
+    while true
+      unless url = dequeue_url()
+        # there are currently no further URLs in the queue
+        return nil
+      end
+
+      unless http_url = HttpUrl.parse(url)
+        log_error :invalid_url, url.inspect 
+        next
+      end
+
+      if has_file?(http_url.to_filename) 
+        log :skip_url__already_fetched, url.inspect
+        next
+      end
+
+      return http_url
+    end # while
   end
 
   def filename(name)
