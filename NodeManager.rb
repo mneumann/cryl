@@ -15,10 +15,8 @@ class NodeManager
   #
   attr_reader :root_dir
 
-  def initialize(root_dir, num_queues=23, max_connections=1000, max_outstanding=10_000)
+  def initialize(root_dir, num_queues=23)
     @num_queues = num_queues
-    @max_connections, @max_outstanding = max_connections, max_outstanding
-    @connections = Hash.new
 
     @root_dir = File.expand_path(root_dir)
 
