@@ -1,2 +1,1 @@
 -define(ROOT_DIR, "/tmp/cryl").
--define(NODES, ['p1@nunus', 'p2@nunus', 'p3@nunus']).

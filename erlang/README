@@ -1,0 +1,11 @@
+Start the workers:
+  startup:create(Nodes).
+  startup:start(Nodes).
+
+Submit URLs to them: 
+
+  submitter:start(Nodes, "urls.txt")
+
+Start on one box:
+
+  example:start().
