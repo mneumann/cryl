@@ -20,6 +20,7 @@ class LinkExtractor
       when :emptytag, :stag
         case name
         when 'a', 'A'
+          next unless attrs
           if href = attrs['href'] || attrs['HREF'] || attrs['Href'] || attrs['HRef']
             #
             # omit empty links
@@ -32,5 +33,13 @@ class LinkExtractor
         end
       end
     end
+  end
+end
+
+if __FILE__ == $0
+  while line = STDIN.gets
+    line.chomp!
+    body = File.read(line) rescue nil
+    LinkExtractor.new(body).each {|l| puts l} if body
   end
 end
