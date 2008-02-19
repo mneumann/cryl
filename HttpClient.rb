@@ -77,7 +77,12 @@ class HttpClient < RevSocket
   end
 
   def handle_read_header
+    STDERR.puts "blah"
     return false unless http_parse()
+
+    #p @header.http_status
+    #p @header.http_reason
+    #p @header.http_version
 
     # TODO:
     # check request
@@ -140,7 +145,7 @@ class HttpClient < RevSocket
   end
 
   def on_read
-    return false if @read_buffer.empty?
+    return if @read_buffer.empty?
     while send("handle_#{@state}"); end
   end
 

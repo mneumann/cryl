@@ -9,7 +9,7 @@ create() ->
     lists:map(fun(Node) ->
         rpc:call(Node, worker, create, [
             node_root(Node),
-            13, 1000, 10000
+            27, 1000, 10000
         ])
         end, ?NODES).
 
