@@ -15,8 +15,11 @@ class NodeManager
   #
   attr_reader :root_dir
 
-  def initialize(root_dir, num_queues=61)
+  def initialize(root_dir, num_queues=23, max_connections=1000, max_outstanding=10_000)
     @num_queues = num_queues
+    @max_connections, @max_outstanding = max_connections, max_outstanding
+    @connections = Hash.new
+
     @root_dir = File.expand_path(root_dir)
 
     @files_dir = File.join(@root_dir, 'files')
@@ -37,8 +40,8 @@ class NodeManager
   #
   # Create the initial directory structure
   #
-  def setup!
-    FileUtils.rm_rf(@root_dir) if File.exist?(@root_dir)
+  def setup!(delete=true)
+    FileUtils.rm_rf(@root_dir) if File.exist?(@root_dir) and delete
     FileUtils.mkdir_p(@root_dir)
     FileUtils.mkdir_p(@files_dir)
     FileUtils.mkdir_p(@queues_dir)
@@ -69,14 +72,38 @@ class NodeManager
   end
 
   #
+  # Reads +numlines+ from file +fh+ and inserts them
+  # as URLs into the queue. 
+  #
+  def enqueue_lines(fh, numlines)
+    vc = 0 # valid count 
+    lc = 0 # line count
+    while line = fh.gets
+      vc += 1 if enqueue_url(line)
+      lc += 1
+      break if numlines and lc >= numlines
+    end
+    [lc, vc]
+  end
+
+  #
   # Enqueue always works on the 'next' queue, while
   # from the current queue elements are only dequeued.
+  # Returns true if +url+ was put in the queue, otherwise
+  # false (file already exist or invalid URL).
   #
   def enqueue_url(url)
-    raise "FATAL: invalid URL" if url =~ /[\n\r]/
-    queue_no = select_queue(url)
-    fh = (@next_queue_files[queue_no] ||= File.open(File.join(@next_queue_dir, queue_no.to_s), 'a+'))
-    fh.puts url
+    if http_url = HttpUrl.parse(url)
+      return false if has_file?(http_url.to_filename) 
+      url = http_url.to_s
+      raise "FATAL: invalid URL" if url =~ /[\n\r]/
+      queue_no = select_queue(url)
+      fh = (@next_queue_files[queue_no] ||= File.open(File.join(@next_queue_dir, queue_no.to_s), 'a+'))
+      fh.puts url
+      true
+    else
+      false
+    end
   end
 
   def dequeue_url
