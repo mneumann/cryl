@@ -16,6 +16,14 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
+#define LINE_BUF_SIZE (4*1024)
+#define LINKS_EXT ".links"
+#define LINKS_EXT_SIZE 6 
+#define HREF_BUF_SIZE (4*1024)
+
+static char line_buf[LINE_BUF_SIZE];
+static char href_buf[HREF_BUF_SIZE];
+
 /*
  * Chops string +str+ at character +x+.
  */
@@ -23,16 +31,6 @@ void chop(char *str, char x)
 {
   char *p; if ((p = index(str, x))) *p = '\0';
 }
-
-#define LINE_BUF_SIZE (4*1024)
-#define LINKS_EXT ".links"
-#define LINKS_EXT_SIZE 6 
-
-static char line_buf[LINE_BUF_SIZE];
-static char line_buf2[LINE_BUF_SIZE+LINKS_EXT_SIZE];
-
-#define HREF_BUF_SIZE (4*1024)
-static char href_buf[HREF_BUF_SIZE];
 
 void
 output_href(int i, int of)
@@ -167,7 +165,6 @@ parse(char *p, char *last, int of)
   output_href(i, of);
 }
 
-
 int
 main(int argc, char **argv)
 {
@@ -175,7 +172,7 @@ main(int argc, char **argv)
   void *p;
   off_t len;
 
-  while (fgets(line_buf, LINE_BUF_SIZE, stdin))
+  while (fgets(line_buf, LINE_BUF_SIZE-LINKS_EXT_SIZE, stdin))
   {
     chop(line_buf, '\n');
     chop(line_buf, '\r');
@@ -212,14 +209,12 @@ main(int argc, char **argv)
     /*
      * Open output file
      */
-    line_buf2[0] = '\0';
-    strcat(line_buf2, line_buf);
-    strcat(line_buf2, LINKS_EXT);
+    strcat(line_buf, LINKS_EXT);
 
-    of = open(line_buf2, O_WRONLY|O_CREAT, 0444);
+    of = open(line_buf, O_WRONLY|O_CREAT, 0444);
     if (of == -1)
     {
-      fprintf(stderr, "LINKS-OPEN: %s\n", line_buf2);
+      fprintf(stderr, "LINKS-OPEN: %s\n", line_buf);
       munmap(p, len);
       close(fh);
       continue;
