@@ -1,6 +1,6 @@
 %
 % The fetch manager maintains a number of fetch processes
-% and also takes care than not more than one connection 
+% and also takes care that not more than one connection 
 % to an IP address is established. 
 % 
 % Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
