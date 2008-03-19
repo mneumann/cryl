@@ -82,7 +82,9 @@ start() ->
     register(fetcher, 
         spawn(fun() -> fetch_manager:start(settings:max_conns()) end)),
 
-    loop(initial_state()).
+    loop(initial_state()),
+
+    error_logger:info_msg("Finished~n").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
