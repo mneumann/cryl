@@ -5,63 +5,39 @@
 -module(link_fetcher).
 -export([start/0]).
 -include("./uri.hrl").
--define(ROOT_DIR, "./work").
+-record(fetch_state, {root_dir, outstanding_reqs, total_reqs, max_outstanding}).
 
 request_completed(_Req, _Reason) -> ok.
 
-try_cleanup(Sum) ->
-    receive
-        {complete, Req, Reason} ->
-            request_completed(Req, Reason),
-            try_cleanup(Sum+1)
-    after 0 ->
-        Sum
-    end.
-try_cleanup() -> try_cleanup(0).
-
-cleanup(0, Sum) -> Sum;
-cleanup(Outstanding, Sum) ->
-    io:format("cleanup[~p]~n", [Outstanding]),
-    receive
-        {complete, Req, Reason} ->
-            request_completed(Req, Reason),
-            cleanup(Outstanding-1, Sum+1)
-    end.
-
-cleanup(N) -> cleanup(N, 0).
-
-loop(LineNo, 0=Avail) -> 
-    loop(LineNo, Avail+cleanup(1));
-
-loop(LineNo, Avail) ->
-    Avail2 = Avail + try_cleanup(),
-    case io:get_line('') of
-        Str when is_list(Str) ->
-	    io:format("Line: ~p~n", [LineNo]),
-            Y = post_request(my_utils:strip(Str)),
-            loop(LineNo+1, Avail2+Y);
-        eof ->
-            cleanup(settings:max_outstanding() - Avail);
+loop(StateO) ->
+    State = cleanup(StateO),
+    case next_line() of
+        {ok, Line} ->
+            Total = State#fetch_state.total_reqs,
+	    io:format("Line: ~p~n", [Total]),
+            Y = post_request(State, my_utils:chomp(Line)),
+            NextState = State#fetch_state{
+                outstanding_reqs = State#fetch_state.outstanding_reqs + Y,
+                total_reqs = Total + 1},
+            loop(NextState);
         _ ->
-            io:format("ERROR get_line~n"),
-            cleanup(settings:max_outstanding() - Avail)
+            finish(State)
     end.
 
-post_request(URL) ->
+post_request(State, URL) ->
     case uri:parse(URL) of
         #http_uri{host=Host, port=Port}=HttpUri ->
-            Filename = uri:to_filename(HttpUri, ?ROOT_DIR),
+            Filename = uri:to_filename(HttpUri, State#fetch_state.root_dir),
             case filelib:is_file(Filename) of
                 true ->
-                    % file already exists. skip it
-                    io:format("File was already fetched. skip.~n"),
+                    error_logger:info_msg("Skip already fetched file: ~s~n", [Filename]),
                     0;
                 false ->
                     filelib:ensure_dir(Filename),
                     file:write_file(Filename, ""), % create the file
                     case my_utils:resolve_host(Host) of
                         error ->
-                            io:format("DNS Resolv failed: ~p~n", [Host]),
+                            error_logger:error_msg("DNS resolv failed: ~p~n", [Host]),
                             0;
                         IP ->
 			    fetch_manager:post_request(whereis(fetcher), IP, HttpUri, Filename),
@@ -69,9 +45,16 @@ post_request(URL) ->
                     end
             end;
         {error, _} ->
-            io:format("Invalid URL: ~p~n", [URL]),
+            error_logger:error_msg("Invalid URL: ~p~n", [URL]),
             0
     end.
+
+initial_state() ->
+    #fetch_state{
+        root_dir = settings:root_dir(), 
+        outstanding_reqs = 0,
+        total_reqs = 0,
+        max_outstanding = settings:max_outstanding()}.
 
 
 start() ->
@@ -79,6 +62,45 @@ start() ->
     %error_logger:logfile({open, ErrorLog}),
     error_logger:tty(true),
 
-    FetcherPid = spawn(fun() -> fetch_manager:start(settings:max_conns()) end),
-    register(fetcher, FetcherPid),
-    loop(0, settings:max_outstanding()).
+    register(fetcher, 
+        spawn(fun() -> fetch_manager:start(settings:max_conns()) end)),
+
+    loop(initial_state()).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O < M) ->
+    receive
+        {complete, Req, Reason} ->
+            request_completed(Req, Reason),
+            cleanup(State#fetch_state{outstanding_reqs = O - 1})
+    after 0 ->
+        State
+    end;
+cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O >= M) ->
+    receive
+        {complete, Req, Reason} ->
+            request_completed(Req, Reason),
+            cleanup(State#fetch_state{outstanding_reqs = O - 1})
+    end.
+
+finish(#fetch_state{outstanding_reqs=0}=State) -> State;
+finish(#fetch_state{outstanding_reqs=O}=State) when (O > 0) ->
+    receive
+        {complete, Req, Reason} ->
+            request_completed(Req, Reason),
+            finish(State#fetch_state{outstanding_reqs = O - 1})
+    end.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+next_line() ->
+    case io:get_line('') of
+        Str when is_list(Str) ->
+            {ok, Str};
+        eof ->
+            eof;
+        _ ->
+            error_logger:error_msg("get_line failed~n"),
+            {error, 'get_line failed'}
+    end.
