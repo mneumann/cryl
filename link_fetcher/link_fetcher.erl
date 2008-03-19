@@ -15,13 +15,7 @@ loop(StateO) ->
         {ok, Line} ->
             Y = post_request(State, my_utils:chomp(Line)),
             Total = State#fetch_state.total_reqs,
-            case (Total rem 100) of
-                0 ->
-                    error_logger:info_msg("Total: ~p~n", [Total]);
-                _ ->
-                    ok
-            end,
-
+            my_utils:rate_error_logger("Total: ~p~n", Total, 100),
             NextState = State#fetch_state{
                 outstanding_reqs = State#fetch_state.outstanding_reqs + Y,
                 total_reqs = Total + 1},
