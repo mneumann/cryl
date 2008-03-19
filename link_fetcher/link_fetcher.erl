@@ -13,14 +13,21 @@ loop(StateO) ->
     State = cleanup(StateO),
     case next_line() of
         {ok, Line} ->
-            Total = State#fetch_state.total_reqs,
-	    io:format("Line: ~p~n", [Total]),
             Y = post_request(State, my_utils:chomp(Line)),
+            Total = State#fetch_state.total_reqs,
+            case (Total rem 100) of
+                0 ->
+                    error_logger:info_msg("Total: ~p~n", [Total]);
+                _ ->
+                    ok
+            end,
+
             NextState = State#fetch_state{
                 outstanding_reqs = State#fetch_state.outstanding_reqs + Y,
                 total_reqs = Total + 1},
             loop(NextState);
         _ ->
+            error_logger:info_msg("Finish: ~p~n", [State#fetch_state.outstanding_reqs]),
             finish(State)
     end.
 
@@ -28,19 +35,23 @@ post_request(State, URL) ->
     case uri:parse(URL) of
         #http_uri{host=Host, port=Port}=HttpUri ->
             Filename = uri:to_filename(HttpUri, State#fetch_state.root_dir),
-            case filelib:is_file(Filename) of
+            UrlFilename = Filename ++ ".url",
+            BodyFilename = Filename ++ ".data",
+            Uri = uri:normalize_to_s(HttpUri), 
+          
+            case filelib:is_file(UrlFilename) of
                 true ->
-                    error_logger:info_msg("Skip already fetched file: ~s~n", [Filename]),
+                    error_logger:info_msg("Skip already fetched URL: ~s~n", [Uri]),
                     0;
                 false ->
                     filelib:ensure_dir(Filename),
-                    file:write_file(Filename, ""), % create the file
+                    file:write_file(UrlFilename, Uri ++ "\n"),
                     case my_utils:resolve_host(Host) of
                         error ->
                             error_logger:error_msg("DNS resolv failed: ~p~n", [Host]),
                             0;
                         IP ->
-			    fetch_manager:post_request(whereis(fetcher), IP, HttpUri, Filename),
+			    fetch_manager:post_request(whereis(fetcher), IP, HttpUri, BodyFilename),
                             1
                     end
             end;
@@ -59,8 +70,14 @@ initial_state() ->
 
 start() ->
     crypto:start(),
-    %error_logger:logfile({open, ErrorLog}),
-    error_logger:tty(true),
+
+    case settings:error_log() of
+        false ->
+            error_logger:tty(true);
+        LogFile ->
+            error_logger:logfile({open, LogFile}),
+            error_logger:tty(false)
+    end,
 
     register(fetcher, 
         spawn(fun() -> fetch_manager:start(settings:max_conns()) end)),
