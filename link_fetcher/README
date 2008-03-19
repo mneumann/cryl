@@ -1,0 +1,2 @@
+link_fetcher is an Erlang program that reads a list
+of URLs from stdin and fetches them to a directory. 

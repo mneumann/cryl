@@ -1,0 +1,5 @@
+#!/usr/bin/env escript
+-export([main/1]).
+
+main(_X) ->
+    link_fetcher:start().

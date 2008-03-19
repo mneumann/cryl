@@ -1,0 +1,1 @@
+-record(request, {requestor_pid, server_ip, port, host, request_uri, filename}).
