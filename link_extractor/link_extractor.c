@@ -19,6 +19,8 @@
 #define LINE_BUF_SIZE (4*1024)
 #define LINKS_EXT ".links"
 #define LINKS_EXT_SIZE 6 
+#define DATA_EXT ".data"
+#define DATA_EXT_SIZE 5
 #define HREF_BUF_SIZE (4*1024)
 
 static char line_buf[LINE_BUF_SIZE];
@@ -207,8 +209,19 @@ main(int argc, char **argv)
     }
 
     /*
-     * Open output file
+     * Open output file.
+     *
+     * Output file is filename read on stdin with ".ext" stripped
+     * off (if it has an extension) + ".links".
      */
+    
+    char *ext = rindex(line_buf, '.');
+
+    if (ext != NULL && ext >= rindex(line_buf, '/'))
+    {
+      // strip off extension
+      *ext = '\0';
+    }
     strcat(line_buf, LINKS_EXT);
 
     of = open(line_buf, O_WRONLY|O_CREAT, 0444);
