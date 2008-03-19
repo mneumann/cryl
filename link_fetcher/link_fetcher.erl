@@ -26,8 +26,6 @@ cleanup(Outstanding, Sum) ->
         {complete, Req, Reason} ->
             request_completed(Req, Reason),
             cleanup(Outstanding-1, Sum+1)
-    after 10000 ->
-        Sum
     end.
 
 cleanup(N) -> cleanup(N, 0).
@@ -52,7 +50,6 @@ loop(LineNo, Avail) ->
 post_request(URL) ->
     case uri:parse(URL) of
         #http_uri{host=Host, port=Port}=HttpUri ->
-        %{ok, Basename, _URL2, {Host,Port,ReqURI}} -> 
             Filename = uri:to_filename(HttpUri, ?ROOT_DIR),
             case filelib:is_file(Filename) of
                 true ->
@@ -67,8 +64,7 @@ post_request(URL) ->
                             io:format("DNS Resolv failed: ~p~n", [Host]),
                             0;
                         IP ->
-                            fetcher ! {req, self(), 
-                                       {IP, Port, Host, uri:request_uri(HttpUri), Filename}},
+			    fetch_manager:post_request(whereis(fetcher), IP, HttpUri, Filename),
                             1
                     end
             end;
