@@ -27,8 +27,7 @@ loop(StateO) ->
                 total_reqs = Total + 1},
             loop(NextState);
         _ ->
-            error_logger:info_msg("Finish: ~p~n", [State#fetch_state.outstanding_reqs]),
-            finish(State)
+            State
     end.
 
 post_request(State, URL) ->
@@ -41,7 +40,6 @@ post_request(State, URL) ->
           
             case filelib:is_file(UrlFilename) of
                 true ->
-                    error_logger:info_msg("Skip already fetched URL: ~s~n", [Uri]),
                     0;
                 false ->
                     filelib:ensure_dir(Filename),
@@ -82,8 +80,9 @@ start() ->
     register(fetcher, 
         spawn(fun() -> fetch_manager:start(settings:max_conns()) end)),
 
-    loop(initial_state()),
-
+    State = loop(initial_state()),
+    error_logger:info_msg("Finish: ~p~n", [State#fetch_state.outstanding_reqs]),
+    finish(State),
     error_logger:info_msg("Finished~n").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -105,6 +104,7 @@ cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O >= M)
 
 finish(#fetch_state{outstanding_reqs=0}=State) -> State;
 finish(#fetch_state{outstanding_reqs=O}=State) when (O > 0) ->
+    rate_error_logger("Finish (~p)~n", O, 100),
     receive
         {complete, Req, Reason} ->
             request_completed(Req, Reason),

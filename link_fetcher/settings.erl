@@ -2,7 +2,7 @@
 -export([max_conns/0, max_outstanding/0, root_dir/0, error_log/0]).
 
 -define(DEFAULT_MAX_CONNS, 1000).
--define(DEFAULT_MAX_OUTSTANDING, 10000).
+-define(DEFAULT_MAX_OUTSTANDING, 1000).
 -define(DEFAULT_ROOT_DIR, "./work").
 
 parse_int(EnvKey, Default) ->

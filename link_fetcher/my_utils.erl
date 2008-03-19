@@ -8,7 +8,8 @@
          stdin_each_line/1, stdin_each_line/2,
          stdin_each_line_with_index/1, stdin_each_line_with_index/2,
          strip/1,
-         hex_string_to_integer/1, max/2, min/2, chomp/1, resolve_host/1]).
+         hex_string_to_integer/1, max/2, min/2, chomp/1, resolve_host/1,
+         rate_error_logger/3]).
 
 %
 % Converts a number in the range of 0-15 to it's 
@@ -158,4 +159,12 @@ resolve_host(Host) ->
             IP;
         _ ->
             error
+    end.
+
+rate_error_logger(FormatStr, N, EveryN) ->
+    case (N rem EveryN) of
+        0 ->
+            error_logger:info_msg(FormatStr, [N]);
+        _ ->
+            ok
     end.

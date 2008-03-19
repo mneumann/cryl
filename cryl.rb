@@ -24,7 +24,7 @@ def find_newer(pattern, depth)
   end
 end
 
-system("cd link_fetcher && make compile")
+system("cd link_fetcher && make")
 system("cd link_extractor && make")
 
 # create initial urls file.
