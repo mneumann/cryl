@@ -16,11 +16,16 @@ def urls_file(depth)
   File.join(WORK_DIR, "urls.#{depth}")
 end
 
-def find_newer(pattern)
-  "find #{ROOT_DIR} -name '#{pattern}' -newer #{STAMP_FILE}"
+def find_newer(pattern, depth)
+  if depth == 0
+    "find #{ROOT_DIR} -name '#{pattern}'"
+  else
+    "find #{ROOT_DIR} -name '#{pattern}' -newer #{STAMP_FILE}"
+  end
 end
 
 system("cd link_fetcher && make compile")
+system("cd link_extractor && make")
 
 # create initial urls file.
 FileUtils.cp(ARGV[2], urls_file(0)) 
@@ -35,8 +40,8 @@ DEPTH.times do |depth|
   end
   puts "Fetching done!"
 
-  system("#{ find_newer('*.data') } | ./link_extractor/link_extractor")
+  system("#{ find_newer('*.data', depth) } | ./link_extractor/link_extractor")
   puts "Extracting done!"
 
-  system("#{ find_newer('*.links') } | ruby ./link_aggregator/link_aggregator.rb > #{urls_file(depth+1)}")
+  system("#{ find_newer('*.links', depth) } | ruby ./link_aggregator/link_aggregator.rb > #{urls_file(depth+1)}")
 end

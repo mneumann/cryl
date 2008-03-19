@@ -200,7 +200,7 @@ main(int argc, char **argv)
       continue;
     }
 
-    p = mmap(NULL, len, PROT_READ, 0, fh, 0);
+    p = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fh, 0);
     if (p == MAP_FAILED)
     {
       fprintf(stderr, "MMAP: %s\n", line_buf);
