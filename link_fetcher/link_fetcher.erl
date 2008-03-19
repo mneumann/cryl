@@ -104,7 +104,7 @@ cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O >= M)
 
 finish(#fetch_state{outstanding_reqs=0}=State) -> State;
 finish(#fetch_state{outstanding_reqs=O}=State) when (O > 0) ->
-    rate_error_logger("Finish (~p)~n", O, 100),
+    my_utils:rate_error_logger("Finish (~p)~n", O, 100),
     receive
         {complete, Req, Reason} ->
             request_completed(Req, Reason),
