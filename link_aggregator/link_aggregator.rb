@@ -220,7 +220,7 @@ rescue
   false
 end
 
-def aggregate_links(out=STDOUT, vc_cache_size=10_000)
+def aggregate_links(out=STDOUT, vc_cache_size=100_000)
   vc = VictimCache.new(vc_cache_size)
   while links = gets
     links.chomp!
