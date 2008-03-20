@@ -174,6 +174,32 @@ class HttpUrl
   end
 end
 
+#
+# A VictimCache is a cache that simply replaces an element in case of a
+# collision.
+#
+# Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
+#
+class VictimCache < Array
+  def initialize(size)
+    super(size)
+  end
+
+  def get(key)
+    item = at(key.hash % size())
+    if item and item.first == key
+      item
+    else
+      nil
+    end
+  end
+
+  def put(item) 
+    key = item.first
+    self[key.hash % size()] = item
+  end
+end
+
 def decide(url, base_url)
   if base_url
     u_tld, u_p = url.domain_split_tld
@@ -190,8 +216,8 @@ rescue
   false
 end
 
-
-def aggregate_links(out=STDOUT)
+def aggregate_links(out=STDOUT, vc_cache_size=10_000)
+  vc = VictimCache.new(vc_cache_size)
   while links = gets
     links.chomp!
     next unless File.exist?(links)
@@ -203,7 +229,13 @@ def aggregate_links(out=STDOUT)
     IO.foreach(links) do |line|
       line.chomp!
       if url = HttpUrl.parse(line, base_url)
-        out.puts url.to_s if decide(url, base_url)
+        if decide(url, base_url)
+          u = url.to_s
+          if vc.get(u).nil?
+            out.puts u
+            vc.put([u, true])
+          end
+        end
       end
     end
   end
