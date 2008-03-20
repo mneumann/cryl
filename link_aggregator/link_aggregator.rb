@@ -200,7 +200,7 @@ class VictimCache < Array
   end
 end
 
-EXCLUDE_EXTS = /\.(jpg|jpeg|tiff|tif|gif|png|avi|mpg|mpeg|css|ico)$/i 
+EXCLUDE_EXTS = /\.(jpg|jpeg|tiff|tif|gif|png|avi|mpg|mpeg|css|ico|mp3|ogg|wav|mid|midi)$/i 
 
 def decide(url, base_url)
   if base_url
