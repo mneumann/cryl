@@ -200,6 +200,8 @@ class VictimCache < Array
   end
 end
 
+EXCLUDE_EXTS = /\.(jpg|jpeg|tiff|tif|gif|png|avi|mpg|mpeg|css|ico)$/i 
+
 def decide(url, base_url)
   if base_url
     u_tld, u_p = url.domain_split_tld
@@ -208,7 +210,9 @@ def decide(url, base_url)
       # top-level match
       subdomain = b_p[0..-2] || b_p[0,1]
 
-      return true if u_p[0, subdomain.size] == subdomain
+      if u_p[0, subdomain.size] == subdomain
+        return true if url.path !~ EXCLUDE_EXTS 
+      end
     end
   end
   return false
