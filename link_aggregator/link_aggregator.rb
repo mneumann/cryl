@@ -161,7 +161,35 @@ class HttpUrl
     return false unless o.is_a?(HttpUrl)
     @host == o.host and @port == o.port and @path == o.path and @query == o.query
   end
+
+  TLDS = %w(de com org net co.uk fr es).map {|tld| tld.split(".").reverse}.sort_by {|a| a.size}.reverse
+
+  def domain_split_tld
+    if @host
+      parts = @host.split(".").reverse
+      TLDS.each {|tld|
+        return [tld, parts[tld.size..-1]] if parts[0, tld.size] == tld
+      }
+    end
+  end
 end
+
+def decide(url, base_url)
+  if base_url
+    u_tld, u_p = url.domain_split_tld
+    b_tld, b_p = base_url.domain_split_tld
+    if u_tld == b_tld
+      # top-level match
+      subdomain = b_p[0..-2] || b_p[0,1]
+
+      return true if u_p[0, subdomain.size] == subdomain
+    end
+  end
+  return false
+rescue
+  false
+end
+
 
 def aggregate_links(out=STDOUT)
   while links = gets
@@ -169,15 +197,24 @@ def aggregate_links(out=STDOUT)
     next unless File.exist?(links)
     ext = File.extname(links) 
     base = links[0..(-1-ext.size)]
-    base_url = File.read(base + ".url") rescue nil
+    base_url_line = File.read(base + ".url") rescue nil
+    base_url = HttpUrl.parse(base_url_line)
 
     IO.foreach(links) do |line|
       line.chomp!
       if url = HttpUrl.parse(line, base_url)
-        out.puts url.to_s
+        out.puts url.to_s if decide(url, base_url)
       end
     end
   end
 end
+
+=begin
+p decide(HttpUrl.parse("http://www.ntecs.de/blah"), HttpUrl.parse("http://www.ntecs.de/")) 
+p decide(HttpUrl.parse("http://abc.ntecs.de/blah"), HttpUrl.parse("http://www.ntecs.de/")) 
+p decide(HttpUrl.parse("http://abc.ntecs.de/blah"), HttpUrl.parse("http://ntecs.de/")) 
+p decide(HttpUrl.parse("http://abc.abc.ntecs.de/blah"), HttpUrl.parse("http://def.ntecs.de/"))  # ?
+p decide(HttpUrl.parse("http://google.de/blah"), HttpUrl.parse("http://def.ntecs.de/")) 
+=end
 
 aggregate_links() if __FILE__ == $0
