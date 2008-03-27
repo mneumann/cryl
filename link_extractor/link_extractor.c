@@ -15,6 +15,7 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/uio.h>
+#include "parse.h"
 
 #define LINE_BUF_SIZE (4*1024)
 #define LINKS_EXT ".links"
@@ -34,145 +35,13 @@ void chop(char *str, char x)
   char *p; if ((p = index(str, x))) *p = '\0';
 }
 
-void
-output_href(int i, int of)
-{
-  if (i <= 0) return;
-  href_buf[i++] = '\n';
-  write(of, href_buf, i);
-}
-
-void
-parse(char *p, char *last, int of)
-{
-  char ch, quot;
-  int i;
-
-  enum {
-    sw_start = 0,
-    sw_H,
-    sw_HR,
-    sw_HRE,
-    sw_HREF,
-    sw_HREF_eq,
-    sw_HREF_quot,
-    sw_HREF_content
-  } state;
-
-  i = 0;
-  state = sw_start;
-
-  for (; p < last; p++) 
-  {
-    ch = *p;
-
-    switch (state) {
-
-      case sw_start:
-
-        if (ch == 'h' || ch == 'H')
-          state = sw_H; 
-        break;
-
-      case sw_H:
-
-        if (ch == 'r' || ch == 'R')
-          state = sw_HR; 
-        else
-          state = sw_start;
-        break;
-
-      case sw_HR:
-
-        if (ch == 'e' || ch == 'E')
-          state = sw_HRE; 
-        else
-          state = sw_start;
-        break;
-
-      case sw_HRE:
-
-        if (ch == 'f' || ch == 'F')
-          state = sw_HREF; 
-        else
-          state = sw_start;
-        break;
-
-      case sw_HREF:
-
-        /* skip ws */
-        if (isspace(ch))
-          break;
-
-        if (ch == '=')
-          state = sw_HREF_eq; 
-        else
-          state = sw_start;
-        break;
-
-      case sw_HREF_eq:
-
-        /* skip ws */
-        if (isspace(ch))
-          break;
-
-        if (ch == '"' || ch == '\'')
-        {
-          state = sw_HREF_quot; 
-          quot = ch;
-        }
-        else
-          state = sw_start;
-        break;
-
-      case sw_HREF_quot:
-
-        /* skip ws */
-        if (isspace(ch))
-          break;
-
-        if (ch == quot)
-        {
-          /* empty href */
-          state = sw_start;
-          break;
-        }
-
-        i = 0;
-        state = sw_HREF_content; 
-        /* fallthrough! */
-
-      case sw_HREF_content:
-
-        if (ch == quot || i >= HREF_BUF_SIZE-2)
-        {
-          output_href(i, of);
-
-          state = sw_start;
-          break;
-        }
-
-        if (isspace(ch))
-        {
-          /* remove newlines */
-          ch = ' '; 
-        }
-
-        href_buf[i++] = ch;
-        break;
-
-    }
-  }
-
-  output_href(i, of);
-}
-
 int
 main(int argc, char **argv)
 {
-  int fh, of;
+  int fh, of, cont;
   void *p;
   off_t len;
+  struct parse_state s;
 
   while (fgets(line_buf, LINE_BUF_SIZE-LINKS_EXT_SIZE, stdin))
   {
@@ -233,7 +102,18 @@ main(int argc, char **argv)
       continue;
     }
 
-    parse((char*)p, (char*)p+len, of);
+    parse_init(&s, (char*)p, (char*)p+len, href_buf, HREF_BUF_SIZE-1);
+    while (1)
+    {
+      cont = parse(&s);
+      if (s.copy_buf_pos > 0)
+      {
+        s.copy_buf[s.copy_buf_pos++] = '\n';
+        write(of, s.copy_buf, s.copy_buf_pos);
+        s.copy_buf_pos = 0;
+      }
+      if (!cont) break;
+    }
 
     munmap(p, len);
     close(of);
