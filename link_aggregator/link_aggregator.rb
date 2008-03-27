@@ -93,6 +93,7 @@ class HttpUrl
     #
     # Query (normalize)
     #
+=begin
     if query = uri.query
       begin
         params = CGI.parse(query) 
@@ -111,6 +112,8 @@ class HttpUrl
       end
     end
     url.query = query
+=end
+    url.query = uri.query
 
     #
     # Assert
@@ -230,18 +233,21 @@ def aggregate_links(out=STDOUT, vc_cache_size=100_000)
     base_url_line = File.read(base + ".url") rescue nil
     base_url = HttpUrl.parse(base_url_line)
 
-    IO.foreach(links) do |line|
-      line.chomp!
-      if url = HttpUrl.parse(line, base_url)
-        if decide(url, base_url)
-          u = url.to_s
-          if vc.get(u).nil?
-            out.puts u
-            vc.put([u, true])
+    File.open(links, "r") do |f|
+      while line = f.gets
+    #IO.foreach(links) do |line|
+        line.chomp!
+        if url = HttpUrl.parse(line, base_url)
+          if decide(url, base_url)
+            u = url.to_s
+            if vc.get(u).nil?
+              out.puts u
+              vc.put([u, true])
+            end
           end
         end
-      end
-    end
+      end # while
+    end # File.open
   end
 end
 
