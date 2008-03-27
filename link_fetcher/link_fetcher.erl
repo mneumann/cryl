@@ -26,7 +26,7 @@ loop(StateO) ->
 
 post_request(State, URL) ->
     case uri:parse(URL) of
-        #http_uri{host=Host, port=Port}=HttpUri ->
+        #http_uri{host=Host, port=_Port}=HttpUri ->
             Filename = uri:to_filename(HttpUri, State#fetch_state.root_dir),
             UrlFilename = Filename ++ ".url",
             BodyFilename = Filename ++ ".data",

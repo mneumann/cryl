@@ -43,8 +43,8 @@ normalize_to_s(HttpUri) ->
 %
 to_filename(HttpUri) ->
     NormURI = normalize_to_s(HttpUri),
-    Digest = my_utils:binary_to_hex(crypto:sha(NormURI)),
-    filename:join([filename:join(HttpUri#http_uri.host_tokrl), Digest]).
+    [D1, D2 | Digest] = my_utils:binary_to_hex(crypto:sha(NormURI)),
+    filename:join([filename:join(HttpUri#http_uri.host_tokrl), [D1, D2], Digest]).
 
 to_filename(HttpUri, Root) ->
     filename:join(Root, to_filename(HttpUri)).

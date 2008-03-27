@@ -87,10 +87,10 @@ recv_head(Sock, Filename, State) ->
             {error, {recv_response, Msg}}
     end.
 
-header({'Content-Type', "text/" ++ T}, State) ->
+header({'Content-Type', "text/" ++ _T}, State) ->
     {ok, State};
 
-header({'Content-Type', _Type}, State) ->
+header({'Content-Type', _Type}, _State) ->
     {fail, invalid_content_type};
 
 header({'Transfer-Encoding', "chunked"}, State) ->
