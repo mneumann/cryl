@@ -4,10 +4,20 @@
 
 -module(link_fetcher).
 -export([start/0]).
--include("./uri.hrl").
+-include("uri.hrl").
+-include("fetch_manager.hrl").
 -record(fetch_state, {root_dir, outstanding_reqs, total_reqs, max_outstanding}).
 
-request_completed(_Req, _Reason) -> ok.
+request_completed(Req, _Reason) ->
+  % when the request completes, move the .url.tmp file to .url
+  UrlName = Req#request.urlname,
+  case file:rename(UrlName ++ ".tmp", UrlName) of
+      ok ->
+          ok;
+      Fail ->
+          error_logger:error_msg("Could not rename ~s to ~s~n", [UrlName ++ ".tmp", UrlName]),
+          Fail
+  end.
 
 loop(StateO) ->
     State = cleanup(StateO),
@@ -32,18 +42,27 @@ post_request(State, URL) ->
             BodyFilename = Filename ++ ".data",
             Uri = uri:normalize_to_s(HttpUri), 
           
-            case filelib:is_file(UrlFilename) of
+            case filelib:is_file(UrlFilename) orelse filelib:is_file(UrlFilename ++ ".tmp") of
                 true ->
                     0;
                 false ->
                     filelib:ensure_dir(Filename),
-                    file:write_file(UrlFilename, Uri ++ "\n"),
+                    file:write_file(UrlFilename ++ ".tmp", Uri ++ "\n"),
                     case my_utils:resolve_host(Host) of
                         error ->
                             error_logger:error_msg("DNS resolv failed: ~p~n", [Host]),
                             0;
                         IP ->
-			    fetch_manager:post_request(whereis(fetcher), IP, HttpUri, BodyFilename),
+                            R = #request{
+                                requestor_pid = self(),
+                                server_ip = IP,
+                                port = HttpUri#http_uri.port,
+                                host = HttpUri#http_uri.host,
+                                request_uri = uri:request_uri(HttpUri),
+                                filename = BodyFilename,
+                                urlname = UrlFilename },
+
+			    fetch_manager:post_request(whereis(fetcher), R),
                             1
                     end
             end;

@@ -1,1 +1,1 @@
--record(request, {requestor_pid, server_ip, port, host, request_uri, filename}).
+-record(request, {requestor_pid, server_ip, port, host, request_uri, http_uri, filename, urlname}).

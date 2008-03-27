@@ -6,7 +6,7 @@
 % Copyright (c) 2008 by Michael Neumann (mneumann@ntecs.de)
 %
 -module(fetch_manager).
--export([start/1, post_request/4]).
+-export([start/1, post_request/2]).
 
 -include("uri.hrl").
 -include("fetch_manager.hrl").
@@ -23,22 +23,12 @@ initial_state(MaxConns) ->
         queued_requests = gb_trees:empty(),
         max_conns = MaxConns }.
 
-post_request(FetcherPid, IP, HttpUri, Filename) ->
-    FetcherPid ! {req, self(), IP, HttpUri, Filename}.
+post_request(FetcherPid, Req) ->
+    FetcherPid ! {req, Req}.
 
 loop(State) ->
     receive
-        % FIXME: send #Request
-        {req, Pid, IP, HttpUri, Filename} ->
-            % build request record
-            R = #request{
-                requestor_pid = Pid,
-                server_ip = IP,
-                port = HttpUri#http_uri.port,
-                host = HttpUri#http_uri.host,
-                request_uri = uri:request_uri(HttpUri),
-                filename = Filename},
-
+        {req, R} ->
             case is_request_busy(R, State) of
                 true ->
                     % enqueue and continue
