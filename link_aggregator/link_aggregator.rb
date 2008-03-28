@@ -203,60 +203,77 @@ class VictimCache < Array
   end
 end
 
-EXCLUDE_EXTS = /\.(jpg|jpeg|tiff|tif|gif|png|avi|mpg|mpeg|css|ico|mp3|ogg|wav|mid|midi|pdf|swf|spl|exe|zip|tgz|rar|tar|gz|fla|flv|svg|doc|xls)$/i 
+class LinkAggregator
+  EXCLUDE_EXTS = /\.(jpg|jpeg|tiff|tif|gif|png|avi|mpg|mpeg|css|ico|mp3|ogg|wav|mid|midi|pdf|swf|spl|exe|zip|tgz|rar|tar|gz|fla|flv|svg|doc|xls)$/i 
 
-def decide(url, base_url)
-  if base_url
-    u_tld, u_p = url.domain_split_tld
-    b_tld, b_p = base_url.domain_split_tld
-    if u_tld == b_tld
-      # top-level match
-      subdomain = b_p[0..-2] || b_p[0,1]
+  attr_reader :base_url
 
-      if u_p[0, subdomain.size] == subdomain
-        return true if url.path !~ EXCLUDE_EXTS 
-      end
+  def with_base_url(str)
+    old_base_url = @base_url
+    begin
+      @base_url = HttpUrl.parse(str) 
+      yield
+    ensure
+      @base_url = old_base_url
     end
   end
-  return false
-rescue
-  false
+
+  def check(url_str)
+    if url = HttpUrl.parse(url_str, @base_url)
+      if decide(url, @base_url)
+        u = url.to_s
+        return false, u if @vc.get(u)
+        @vc.put([u, true])
+        return true, u
+      else
+        return false, url.to_s
+      end
+    end
+    return false, url_str
+  end
+
+  def initialize(vc_cache_size=1000)
+    @vc = VictimCache.new(vc_cache_size)
+    @base_url = nil
+  end
+
+  def decide(url, base_url)
+    if base_url
+      u_tld, u_p = url.domain_split_tld
+      b_tld, b_p = base_url.domain_split_tld
+      if u_tld == b_tld
+        # top-level match
+        subdomain = b_p[0..-2] || b_p[0,1]
+
+        if u_p[0, subdomain.size] == subdomain
+          return true if url.path !~ EXCLUDE_EXTS 
+        end
+      end
+    end
+    return false
+  rescue
+    false
+  end
 end
 
-def aggregate_links(out=STDOUT, vc_cache_size=100_000)
-  vc = VictimCache.new(vc_cache_size)
+if __FILE__ == $0
+  out = STDOUT
+  agr = LinkAggregator.new
   while links = gets
     links.chomp!
     next unless File.exist?(links)
     ext = File.extname(links) 
     base = links[0..(-1-ext.size)]
     base_url_line = File.read(base + ".url") rescue nil
-    base_url = HttpUrl.parse(base_url_line)
-
-    File.open(links, "r") do |f|
-      while line = f.gets
-    #IO.foreach(links) do |line|
-        line.chomp!
-        if url = HttpUrl.parse(line, base_url)
-          if decide(url, base_url)
-            u = url.to_s
-            if vc.get(u).nil?
-              out.puts u
-              vc.put([u, true])
-            end
+    agr.with_base_url(base_url_line) { 
+      File.open(links, "r") do |f|
+        while line = f.gets
+          line.chomp!
+          if u = agr.check(line)
+            out.puts u
           end
-        end
-      end # while
-    end # File.open
+        end # while
+      end # File.open
+    }
   end
 end
-
-=begin
-p decide(HttpUrl.parse("http://www.ntecs.de/blah"), HttpUrl.parse("http://www.ntecs.de/")) 
-p decide(HttpUrl.parse("http://abc.ntecs.de/blah"), HttpUrl.parse("http://www.ntecs.de/")) 
-p decide(HttpUrl.parse("http://abc.ntecs.de/blah"), HttpUrl.parse("http://ntecs.de/")) 
-p decide(HttpUrl.parse("http://abc.abc.ntecs.de/blah"), HttpUrl.parse("http://def.ntecs.de/"))  # ?
-p decide(HttpUrl.parse("http://google.de/blah"), HttpUrl.parse("http://def.ntecs.de/")) 
-=end
-
-aggregate_links() if __FILE__ == $0

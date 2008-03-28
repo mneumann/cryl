@@ -1,0 +1,96 @@
+#!/usr/bin/env ruby
+
+require 'optparse'
+require 'ostruct'
+
+options = OpenStruct.new 
+options.root_dir = File.join(Dir.pwd, "work")
+options.urls = nil
+options.depth = 2
+
+options.processes = 1
+
+options.keep_rejected_urls = false
+options.update = false
+options.compile = false
+options.daemonize = false
+
+opts = OptionParser.new do |opts|
+  opts.banner = "Usage: cryl [options]"
+
+  opts.on("-r", "--root-dir DIR", "Directory to store the crawl into",
+                                  "  (default: #{options.root_dir})") do |r|
+    options.root_dir = r
+  end
+
+  opts.on("-u", "--urls FILE", "File containing the URLs to crawl") do |u|
+    options.urls = u
+  end
+
+  opts.on("-d", "--depth N", Integer, "Crawl depth",
+                                      "  (default: #{options.depth})") do |d|
+    options.depth = d
+  end
+
+  opts.on("-p", "--processes N", Integer, "Number of (fetch) processes to use",
+                                      "  (default: #{options.processes})") do |p|
+    options.processes = p
+  end
+
+  opts.on("--keep-rejected-urls", "Keep rejected URLs") do 
+    options.keep_rejected_urls = true 
+  end
+
+  opts.on("--update", "Use it if you stopped a crawl and restart it now") do
+    options.update = true 
+  end
+
+  opts.on("--compile", "Compiles all relevant files") do
+    options.compile = true 
+  end
+
+  opts.on("--daemonize", FalseClass, "Run in background, daemonized") do
+    options.daemonize = true 
+  end
+
+  opts.on_tail("-h", "--help", "Show this message") do
+    puts opts
+    exit
+  end
+end
+
+args = ARGV.dup
+opts.parse!(args)
+if !args.empty?
+  puts opts
+  exit
+end
+
+if options.urls.nil?
+  puts "No URLs given (--urls)"
+  puts
+  puts opts
+  exit
+end
+
+if options.daemonize
+  begin
+  require 'rubygems'
+  rescue LoadError
+  end
+  require 'daemonize'
+end
+
+if options.compile
+  puts "starting to compile..."
+  system("cd #{File.dirname(__FILE__)} && make all")
+end
+
+$LOAD_PATH.unshift File.dirname(__FILE__)
+require 'cryl'
+
+cryl = Cryl.new(options.root_dir, options.processes, options.keep_rejected_urls)
+
+Daemons.daemonize if options.daemonize
+
+cryl.crawl(options.urls, options.depth, 0, options.update)

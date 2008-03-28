@@ -15,6 +15,7 @@ class LinkFetcher
     ENV['ERL_AFLAGS'] = "-pa #{DIR}"
     IO.popen(BINARY, 'w') {|@io|
       yield self
+      @io.close
     }
   end
 

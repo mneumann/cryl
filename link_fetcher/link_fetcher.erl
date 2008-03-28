@@ -7,6 +7,7 @@
 -include("uri.hrl").
 -include("fetch_manager.hrl").
 -record(fetch_state, {root_dir, outstanding_reqs, total_reqs, max_outstanding}).
+-define(RATE, 20).
 
 request_completed(Req, _Reason) ->
   % when the request completes, move the .url.tmp file to .url
@@ -25,7 +26,7 @@ loop(StateO) ->
         {ok, Line} ->
             Y = post_request(State, my_utils:chomp(Line)),
             Total = State#fetch_state.total_reqs,
-            my_utils:rate_error_logger("Total: ~p~n", Total, 100),
+            my_utils:rate_error_logger("Total: ~p~n", Total, ?RATE),
             NextState = State#fetch_state{
                 outstanding_reqs = State#fetch_state.outstanding_reqs + Y,
                 total_reqs = Total + 1},
@@ -113,15 +114,21 @@ cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O >= M)
         {complete, Req, Reason} ->
             request_completed(Req, Reason),
             cleanup(State#fetch_state{outstanding_reqs = O - 1})
+    after 10000 ->
+      error_logger:info_msg("Stuck in cleanup! 10 seconds no completion!~n"),
+      cleanup(State)
     end.
 
 finish(#fetch_state{outstanding_reqs=0}=State) -> State;
 finish(#fetch_state{outstanding_reqs=O}=State) when (O > 0) ->
-    my_utils:rate_error_logger("Finish (~p)~n", O, 100),
+    my_utils:rate_error_logger("Finish (~p)~n", O, ?RATE),
     receive
         {complete, Req, Reason} ->
             request_completed(Req, Reason),
             finish(State#fetch_state{outstanding_reqs = O - 1})
+    after 10000 ->
+      error_logger:info_msg("Stuck in finish! 10 seconds no completion!~n"),
+      finish(State)
     end.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

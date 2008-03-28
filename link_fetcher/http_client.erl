@@ -13,6 +13,7 @@
                 location}). 
 -define(CRLF, <<"\r\n">>).
 -define(BLOCK_SIZE, 16384).
+-define(TIMEOUT, 10000). % 10 seconds
 
 default_state() ->
   #state{version = undefined,
@@ -21,7 +22,9 @@ default_state() ->
          chunked = false}.
          
 download({IP, Port, Host, ReqURI}, Filename) -> 
-    case gen_tcp:connect(IP, Port, [binary, {packet, http}, {active, false}]) of
+    case gen_tcp:connect(IP, Port, 
+                         [binary, {packet, http}, {active, false}],
+                         ?TIMEOUT) of
         {ok, Sock} ->
             Req = construct_request(Host, ReqURI),
                 Return =
