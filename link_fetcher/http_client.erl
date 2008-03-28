@@ -63,13 +63,13 @@ recv_head(Sock, Filename, State) ->
                     404 -> 
                         not_found;
                     _   ->
-                        {fail, invalid_code, Code}  
+                        {fail, {invalid_code, Code}}
                 end;
             {http_header, _, Key, _, Val} ->
                 case header({Key, Val}, State) of
                     {ok, NewState} -> 
                         recv_head(Sock, Filename, NewState);
-                    {fail, Msg}=M ->
+                    {fail, _}=M ->
                         M
                 end;
             http_eoh ->
@@ -93,8 +93,8 @@ recv_head(Sock, Filename, State) ->
 header({'Content-Type', "text/" ++ _T}, State) ->
     {ok, State};
 
-header({'Content-Type', _Type}, _State) ->
-    {fail, invalid_content_type};
+header({'Content-Type', Type}, _State) ->
+    {fail, {invalid_content_type, Type}};
 
 header({'Transfer-Encoding', "chunked"}, State) ->
     {ok, State#state{chunked = true}};
