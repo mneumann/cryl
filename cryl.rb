@@ -50,20 +50,22 @@ class Cryl
               end
             end
           end
-          puts "#{t} ready to stop"
+          log("#{t} ready to stop")
         end
-        puts "#{t} stopped"
+        log("#{t} stopped")
       }
     }.each {|t| t.join}
   end
 
   def cycle(urls_in, urls_out, urls_rej=nil, not_before=Time.now)
+    log("fetching...")
     if @num_threads == 1
       bulk_fetch(urls_in, @fetch_log)
     else
       bulk_fetch_threaded(urls_in, @num_threads, @fetch_log + ".%s")
     end
 
+    log("URL extracting/aggregating...")
     Dir.glob("#{@storage_dir}/**/*.url") do |fn|
       next if not_before and File.stat(fn).mtime < not_before
       @link_aggregator.with_base_url(File.read(fn)) do
@@ -80,6 +82,7 @@ class Cryl
   end
 
   def crawl(last_url_file, max_depth=2, cur_depth=0, update=false)
+    log("entered method crawl #{cur_depth}/#{max_depth}")
     next_url_file = crawl_cycle(last_url_file, cur_depth, (update && cur_depth == 0) ? nil : Time.now)
     crawl(next_url_file, max_depth, cur_depth+1) if cur_depth < max_depth
   end
@@ -115,6 +118,10 @@ class Cryl
     n = File.join(@stages_dir, stage.to_s)
     FileUtils.mkdir_p(n)
     return n
+  end
+
+  def log(msg)
+    $log.puts("#{Time.now}: #{msg}") if $log
   end
 
 end

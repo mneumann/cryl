@@ -2,6 +2,7 @@
 
 require 'optparse'
 require 'ostruct'
+require 'fileutils'
 
 options = OpenStruct.new 
 options.root_dir = File.join(Dir.pwd, "work")
@@ -73,16 +74,24 @@ if options.urls.nil?
   exit
 end
 
-if options.daemonize
-  begin
-  require 'rubygems'
-  rescue LoadError
-  end
-  require 'daemons'
+def log(msg)
+  $log.puts("#{Time.now}: #{msg}") if $log
 end
 
+if options.daemonize
+  require 'vendor/daemonize'
+  class Daemons; include Daemonize end
+
+  FileUtils.mkdir_p(options.root_dir)
+  $log = File.open(File.join(options.root_dir, "log"), 'w+')
+else
+  $log = STDOUT
+end
+
+log("command-line: #{ ARGV.join(" ") }")
+
 if options.compile
-  puts "starting to compile..."
+  log("starting to compile...")
   system("cd #{File.dirname(__FILE__)} && make all")
 end
 
@@ -91,6 +100,10 @@ require 'cryl'
 
 cryl = Cryl.new(options.root_dir, options.processes, options.keep_rejected_urls)
 
-Daemons.daemonize if options.daemonize
+log("going to background")
+Daemons.new.daemonize if options.daemonize
+log("daemonized")
 
+log("starting the crawl")
 cryl.crawl(options.urls, options.depth, 0, options.update)
+log("finished")
