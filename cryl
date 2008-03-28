@@ -78,7 +78,7 @@ if options.daemonize
   require 'rubygems'
   rescue LoadError
   end
-  require 'daemonize'
+  require 'daemons'
 end
 
 if options.compile
