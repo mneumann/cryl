@@ -76,7 +76,10 @@ if options.urls.nil?
 end
 
 def log(msg)
-  $log.puts("#{Time.now}: #{msg}") if $log
+  if $log
+    $log.puts("#{Time.now}: #{msg}")
+    $log.flush
+  end
 end
 
 if options.daemonize
@@ -101,10 +104,12 @@ require 'cryl'
 cryl = Cryl.new(options.root_dir, options.processes, options.keep_rejected_urls)
 
 log("going to background")
-$log.flush if $log
-STDOUT.flush
-STDERR.flush
-Daemons.new.daemonize if options.daemonize
+if options.daemonize
+  Daemons.new.daemonize(0, true)
+  # reopen log file
+  $log = File.open(File.join(options.root_dir, "log"), 'a+')
+end
+
 log("daemonized")
 log("PID: #{Process.pid}")
 

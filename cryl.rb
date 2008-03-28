@@ -120,8 +120,4 @@ class Cryl
     return n
   end
 
-  def log(msg)
-    $log.puts("#{Time.now}: #{msg}") if $log
-  end
-
 end
