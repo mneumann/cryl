@@ -3,9 +3,10 @@
 require 'optparse'
 require 'ostruct'
 require 'fileutils'
+$LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__))
 
 options = OpenStruct.new 
-options.root_dir = File.join(Dir.pwd, "work")
+options.root_dir = File.expand_path(File.join(Dir.pwd, "work"))
 options.urls = nil
 options.depth = 2
 
@@ -95,15 +96,25 @@ if options.compile
   system("cd #{File.dirname(__FILE__)} && make all")
 end
 
-$LOAD_PATH.unshift File.dirname(__FILE__)
 require 'cryl'
 
 cryl = Cryl.new(options.root_dir, options.processes, options.keep_rejected_urls)
 
 log("going to background")
+$log.flush if $log
+STDOUT.flush
+STDERR.flush
 Daemons.new.daemonize if options.daemonize
 log("daemonized")
+log("PID: #{Process.pid}")
 
 log("starting the crawl")
-cryl.crawl(options.urls, options.depth, 0, options.update)
+begin
+  cryl.crawl(options.urls, options.depth, 0, options.update)
+rescue Exception => e
+  log("exception occured")
+  log(e.inspect)
+  log(e.backtrace.inspect)
+  exit -1
+end
 log("finished")
