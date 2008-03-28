@@ -20,11 +20,11 @@ opts = OptionParser.new do |opts|
 
   opts.on("-r", "--root-dir DIR", "Directory to store the crawl into",
                                   "  (default: #{options.root_dir})") do |r|
-    options.root_dir = r
+    options.root_dir = File.expand_path(r)
   end
 
   opts.on("-u", "--urls FILE", "File containing the URLs to crawl") do |u|
-    options.urls = u
+    options.urls = File.expand_path(u)
   end
 
   opts.on("-d", "--depth N", Integer, "Crawl depth",
