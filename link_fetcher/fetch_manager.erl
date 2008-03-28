@@ -11,6 +11,7 @@
 -include("uri.hrl").
 -include("fetch_manager.hrl").
 -record(state, {connections, active_requests, queued_requests, max_conns}).
+-define(MAX_FETCH_DURATION, 20000). % stop a fetch after 20 seconds!
 
 start(MaxConns) ->
     process_flag(trap_exit, true),
@@ -116,6 +117,7 @@ start_request(Request, State) ->
         % Notify the linked process with the return status.
         exit(Res)
     end),
+    timer:exit_after(?MAX_FETCH_DURATION, Pid), % kill?
     State#state{
         connections =
             gb_sets:insert(Request#request.server_ip, State#state.connections),
