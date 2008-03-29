@@ -62,7 +62,8 @@ class Cryl
     while url = urls_in.gets
       url.chomp!
       if digest = digest_url(url)
-        fn = File.join(@storage_dir, digest + ".data")
+        base = File.join(@storage_dir, digest)
+        fn = base + ".data"
         if File.exist?(fn)
           @link_aggregator.with_base_url(url) do
             @link_extractor.parse(fn) do |href|
@@ -74,8 +75,8 @@ class Cryl
               end
             end
           end
-        else
-          log("non-existing data file: #{fn}")
+        elsif not File.exist?(base + ".url")
+          log("possibly wrong digest_url: #{fn}, #{url}")
         end
       else
         log("invalid URL: #{url}")
