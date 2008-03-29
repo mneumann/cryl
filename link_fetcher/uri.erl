@@ -1,6 +1,7 @@
 -module(uri).
 -export([parse/1, request_uri/1, normalize_to_s/1, to_filename/1, to_filename/2]).
 -include("uri.hrl").
+-define(SPLIT_AT, 3).
 
 allowed_host_characters([]) -> [];
 allowed_host_characters([H|T]) ->
@@ -43,8 +44,23 @@ normalize_to_s(HttpUri) ->
 %
 to_filename(HttpUri) ->
     NormURI = normalize_to_s(HttpUri),
-    [D1, D2 | Digest] = my_utils:binary_to_hex(crypto:sha(NormURI)),
-    filename:join([filename:join(HttpUri#http_uri.host_tokrl), [D1, D2], Digest]).
+    HexDigest = my_utils:binary_to_hex(crypto:sha(NormURI)),
+    D1 = string:substr(HexDigest, 1,2),
+    D2 = string:substr(HexDigest, 3,2),
+    D3 = string:substr(HexDigest, 5,2),
+    Digest = string:substr(HexDigest, 7),
+    Dom = lists:flatmap(fun (DomPart) -> split_domain_part(DomPart) end, HttpUri#http_uri.host_tokrl),
+    filename:join(Dom ++ ["_", D1, D2, D3, Digest]).
 
 to_filename(HttpUri, Root) ->
     filename:join(Root, to_filename(HttpUri)).
+
+split_domain_part(Str, List) when (length(Str) =< ?SPLIT_AT) ->
+  [Str ++ "." | List];
+
+split_domain_part(Str, List) ->
+  split_domain_part(string:substr(Str, ?SPLIT_AT+1),
+                    [string:substr(Str, 1, ?SPLIT_AT) | List]).
+
+split_domain_part(Str) ->
+  lists:reverse(split_domain_part(Str, [])).

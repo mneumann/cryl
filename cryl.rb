@@ -126,6 +126,7 @@ class Cryl
     return n
   end
 
+  SPLIT_AT = 3
   def digest_url(url)
     if url =~ /^http:\/\/([^\/]+)(.*)$/
       host_port, req_uri = $1.downcase, $2
@@ -138,9 +139,22 @@ class Cryl
 
       hex = Digest::SHA1.hexdigest("http://#{host}:#{port}#{req_uri}")
 
-      list = host.gsub(/[^0-9a-zA-Z.-]+/, '').split(".").reverse
+      list = []
+      host.gsub(/[^0-9a-zA-Z.-]+/, '').split(".").reverse.each {|x|
+        pos = 0
+        while pos < x.size
+          list << x[pos, SPLIT_AT]
+          pos += SPLIT_AT
+        end
+        list.last << "." # to separate domain parts
+      }
+
+      list << "_"
       list << hex[0,2]
-      list << hex[2..-1]
+      list << hex[2,2]
+      list << hex[4,2]
+      list << hex[6..-1]
+
       list.join("/")
     else
       nil
