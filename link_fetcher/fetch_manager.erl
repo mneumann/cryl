@@ -95,10 +95,11 @@ next_request_from_queue(Request, State) ->
 %
 remove_active_request(Pid, State) ->
     Request = gb_trees:get(Pid, State#state.active_requests),
+
     {Request,
      State#state{    
-       active_requests = gb_trees:delete(Pid, State#state.active_requests),
-       connections = gb_sets:delete(Request#request.server_ip, State#state.connections)
+       active_requests = gb_trees:delete_any(Pid, State#state.active_requests),
+       connections = gb_sets:delete_any(Request#request.server_ip, State#state.connections)
      }}.
 
 %
@@ -108,16 +109,25 @@ remove_active_request(Pid, State) ->
 start_request(none, State) -> State;
 start_request(Request, State) ->
     Pid = spawn_link(fun() ->
-        Res = http_client:download({
-            Request#request.server_ip,
-            Request#request.port,
-            Request#request.host,
-            Request#request.request_uri},
-            Request#request.filename),
-        % Notify the linked process with the return status.
-        exit(Res)
+        process_flag(trap_exit, true),
+        Pid2 = spawn_link(fun() ->
+          Res = http_client:download({
+              Request#request.server_ip,
+              Request#request.port,
+              Request#request.host,
+              Request#request.request_uri},
+              Request#request.filename),
+          % Notify the linked process with the return status.
+          exit(Res)
+        end),
+        receive
+            {'EXIT', Pid2, Reason} ->
+                exit(Reason)
+        after ?MAX_FETCH_DURATION ->
+            exit({fail, timeout}) 
+        end
     end),
-    timer:exit_after(?MAX_FETCH_DURATION, Pid), % kill?
+    %timer:exit_after(?MAX_FETCH_DURATION, Pid), % kill?
     State#state{
         connections =
             gb_sets:insert(Request#request.server_ip, State#state.connections),
