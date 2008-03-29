@@ -131,6 +131,10 @@ class Cryl
       host, port = host_port.split(":", 2)
       port ||= 80
 
+      if req_uri.empty? or req_uri.index("?") == 0 
+        req_uri = "/" + req_uri
+      end
+
       hex = Digest::SHA1.hexdigest("http://#{host}:#{port}#{req_uri}")
 
       list = host.gsub(/[^0-9a-zA-Z.-]+/, '').split(".").reverse
