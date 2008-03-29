@@ -83,7 +83,7 @@ class Cryl
     end
   end
 
-  def crawl(last_url_file, max_depth=2, cur_depth=0, update=false)
+  def crawl(last_url_file, max_depth=2, cur_depth=0)
     log("entered method crawl #{cur_depth}/#{max_depth}")
 
     urls_in_name = urls_file(cur_depth, ".in")

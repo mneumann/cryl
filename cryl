@@ -13,7 +13,6 @@ options.depth = 2
 options.processes = 1
 
 options.keep_rejected_urls = false
-options.update = false
 options.compile = false
 options.daemonize = false
 
@@ -41,10 +40,6 @@ opts = OptionParser.new do |opts|
 
   opts.on("--keep-rejected-urls", "Keep rejected URLs") do 
     options.keep_rejected_urls = true 
-  end
-
-  opts.on("--update", "Use it if you stopped a crawl and restart it now") do
-    options.update = true 
   end
 
   opts.on("--compile", "Compiles all relevant files") do
@@ -115,7 +110,7 @@ log("PID: #{Process.pid}")
 
 log("starting the crawl")
 begin
-  cryl.crawl(options.urls, options.depth, 0, options.update)
+  cryl.crawl(options.urls, options.depth, 0)
 rescue Exception => e
   log("exception occured")
   log(e.inspect)
