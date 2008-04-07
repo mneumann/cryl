@@ -4,11 +4,13 @@ require 'optparse'
 require 'ostruct'
 require 'fileutils'
 $LOAD_PATH.unshift File.expand_path(File.dirname(__FILE__))
+require 'cryl'
 
 options = OpenStruct.new 
 options.root_dir = File.expand_path(File.join(Dir.pwd, "work"))
 options.urls = nil
 options.depth = 2
+options.cat_domain = nil
 
 options.processes = 1
 
@@ -46,6 +48,10 @@ opts = OptionParser.new do |opts|
     options.compile = true 
   end
 
+  opts.on("--cat-domain DIR", "Returns on stdout all data of that domain") do |dom|
+    options.cat_domain = dom 
+  end
+
   opts.on("--daemonize", FalseClass, "Run in background, daemonized") do
     options.daemonize = true 
   end
@@ -60,6 +66,12 @@ args = ARGV.dup
 opts.parse!(args)
 if !args.empty?
   puts opts
+  exit
+end
+
+if options.cat_domain
+  dir = File.join(options.root_dir, 'files', Cryl.domain_to_path(options.cat_domain))
+  system("find #{ dir } -name '*.data' | xargs -I % cat %")
   exit
 end
 
@@ -94,7 +106,6 @@ if options.compile
   system("cd #{File.dirname(__FILE__)} && make all")
 end
 
-require 'cryl'
 
 cryl = Cryl.new(options.root_dir, options.processes, options.keep_rejected_urls)
 
