@@ -6,16 +6,22 @@ require 'link_aggregator/link_aggregator'
 require 'link_extractor/link_extractor'
 
 class Cryl
-  def initialize(root_dir, num_threads=1, keep_rejected_urls=false)
+  def initialize(root_dir, job_name, num_threads=1, keep_rejected_urls=false)
     @root_dir = root_dir
+    @job_name = job_name
     @num_threads = num_threads 
     @keep_rejected_urls = keep_rejected_urls
 
     @storage_dir = File.join(@root_dir, "files")
-    @stages_dir = File.join(@root_dir, "stages")
+    @jobs_dir = File.join(@root_dir, "jobs")
+
+    @job_dir = File.join(@jobs_dir, job_name)
+    @stages_dir = File.join(@job_dir, "stages")
 
     FileUtils.mkdir_p(@root_dir)
     FileUtils.mkdir_p(@storage_dir)
+    FileUtils.mkdir_p(@jobs_dir)
+    FileUtils.mkdir_p(@job_dir)
     FileUtils.mkdir_p(@stages_dir)
 
     @link_extractor = LinkExtractor.new
@@ -24,7 +30,7 @@ class Cryl
 
   def fetch(io, n, log_file=nil)
     if n == 1
-      LinkFetcher.new(@storage_dir, log_file) do |fetcher|
+      LinkFetcher.new(@storage_dir, log_file ? log_file % n : nil) do |fetcher|
         while line = io.gets
           line.chomp!
           fetcher.fetch(line)

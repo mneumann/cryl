@@ -8,6 +8,7 @@ require 'cryl'
 
 options = OpenStruct.new 
 options.root_dir = File.expand_path(File.join(Dir.pwd, "work"))
+options.job_name = nil
 options.urls = nil
 options.depth = 2
 options.cat_domain = nil
@@ -24,6 +25,10 @@ opts = OptionParser.new do |opts|
   opts.on("-r", "--root-dir DIR", "Directory to store the crawl into",
                                   "  (default: #{options.root_dir})") do |r|
     options.root_dir = File.expand_path(r)
+  end
+
+  opts.on("-j", "--job-name NAME", "Name of the Job (required)") do |j|
+    options.job_name = j
   end
 
   opts.on("-u", "--urls FILE", "File containing the URLs to crawl") do |u|
@@ -82,6 +87,13 @@ if options.urls.nil?
   exit
 end
 
+if options.job_name.nil?
+  puts "No Job name given (--job-name)"
+  puts
+  puts opts
+  exit
+end
+
 def log(msg)
   if $log
     $log.puts("#{Time.now}: #{msg}")
@@ -93,8 +105,8 @@ if options.daemonize
   require 'vendor/daemonize'
   class Daemons; include Daemonize end
 
-  FileUtils.mkdir_p(options.root_dir)
-  $log = File.open(File.join(options.root_dir, "log"), 'w+')
+  FileUtils.mkdir_p(File.join(options.root_dir, "jobs", options.job_name))
+  $log = File.open(File.join(options.root_dir, "jobs", options.job_name, "log"), 'w+')
 else
   $log = STDOUT
 end
@@ -107,13 +119,13 @@ if options.compile
 end
 
 
-cryl = Cryl.new(options.root_dir, options.processes, options.keep_rejected_urls)
+cryl = Cryl.new(options.root_dir, options.job_name, options.processes, options.keep_rejected_urls)
 
 log("going to background")
 if options.daemonize
   Daemons.new.daemonize(0, true)
   # reopen log file
-  $log = File.open(File.join(options.root_dir, "log"), 'a+')
+  $log = File.open(File.join(options.root_dir, "jobs", options.job_name, "log"), 'a+')
 end
 
 log("daemonized")
