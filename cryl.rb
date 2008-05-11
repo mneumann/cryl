@@ -37,12 +37,13 @@ class Cryl
         end
       end
     else
+      stop = false
       mutex = Mutex.new
       (1..n).map {|t|
         Thread.new {
           LinkFetcher.new(@storage_dir, log_file ? log_file % t : nil) do |fetcher|
-            stop = false
-            while not stop
+            loop do
+              break if stop
               mutex.synchronize do
                 if !io.eof? and line = io.gets
                   line.chomp!
