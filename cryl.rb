@@ -101,7 +101,7 @@ class Cryl
     begin
       File.link(last_url_file, urls_in_name)
     rescue
-      FileUtils.copy(last_url_file, urls_in_name)
+      FileUtils.copy(last_url_file, urls_in_name) rescue nil
     end
 
     log("fetching...")
