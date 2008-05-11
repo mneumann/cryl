@@ -232,7 +232,7 @@ class LinkAggregator
     return false, url_str
   end
 
-  def initialize(vc_cache_size=1000)
+  def initialize(vc_cache_size=10_000)
     @vc = VictimCache.new(vc_cache_size)
     @base_url = nil
   end
