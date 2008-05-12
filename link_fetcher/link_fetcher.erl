@@ -9,22 +9,52 @@
 -record(fetch_state, {root_dir, outstanding_reqs, total_reqs, max_outstanding}).
 -define(RATE, 20).
 
-request_completed(Req, _Reason) ->
-  % when the request completes, move the .url.tmp file to .url
-  UrlName = Req#request.urlname,
-  case file:rename(UrlName ++ ".tmp", UrlName) of
+finalize(Req) ->
+      UrlName = Req#request.urlname,
+      case file:rename(UrlName ++ ".tmp", UrlName) of
+          ok ->
+              ok;
+          Fail ->
+              error_logger:error_msg("Could not rename ~s to ~s~n", [UrlName ++ ".tmp", UrlName]),
+              Fail
+      end.
+
+request_completed(_State, _Req, _Reason, 0) ->
+  error_logger:error_msg("Redirect limit reached~n"),
+  fail;
+
+request_completed(State, Req, Reason, Retries) ->
+  case Reason of
       ok ->
-          ok;
-      Fail ->
-          error_logger:error_msg("Could not rename ~s to ~s~n", [UrlName ++ ".tmp", UrlName]),
-          Fail
+          C = Req#request.callback,
+          C(Req);
+      {redirect, Location} ->
+          spawn(fun() -> sync_post_request(State, Location, Req, Retries) end);
+      _ ->
+        fail
+  end. 
+
+sync_post_request(State, URL, Req, Retries) ->
+  N = fun(NewReq) ->
+    finalize(NewReq),
+    file:make_link(NewReq#request.filename, Req#request.filename),
+    C = Req#request.callback,
+    C(Req)
+  end,
+
+  post_request(State, URL, N),
+  receive
+      {complete, Req2, Reason} ->
+          request_completed(State, Req2, Reason, Retries-1)
+  after 10000 ->
+      State
   end.
 
 loop(StateO) ->
     State = cleanup(StateO),
     case next_line() of
         {ok, Line} ->
-            Y = post_request(State, my_utils:chomp(Line)),
+            Y = post_request(State, my_utils:chomp(Line), fun(C) -> finalize(C) end),
             Total = State#fetch_state.total_reqs,
             my_utils:rate_error_logger("Total: ~p~n", Total, ?RATE),
             NextState = State#fetch_state{
@@ -35,7 +65,7 @@ loop(StateO) ->
             State
     end.
 
-post_request(State, URL) ->
+post_request(State, URL, Callback) ->
     case uri:parse(URL) of
         #http_uri{host=Host, port=_Port}=HttpUri ->
             Filename = uri:to_filename(HttpUri, State#fetch_state.root_dir),
@@ -61,7 +91,8 @@ post_request(State, URL) ->
                                 host = HttpUri#http_uri.host,
                                 request_uri = uri:request_uri(HttpUri),
                                 filename = BodyFilename,
-                                urlname = UrlFilename },
+                                urlname = UrlFilename,
+                                callback = Callback},
 
 			    fetch_manager:post_request(whereis(fetcher), R),
                             1
@@ -104,7 +135,7 @@ start() ->
 cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O < M) ->
     receive
         {complete, Req, Reason} ->
-            request_completed(Req, Reason),
+            request_completed(State, Req, Reason, 3),
             cleanup(State#fetch_state{outstanding_reqs = O - 1})
     after 0 ->
         State
@@ -112,7 +143,7 @@ cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O < M) 
 cleanup(#fetch_state{outstanding_reqs=O, max_outstanding=M}=State) when (O >= M) ->
     receive
         {complete, Req, Reason} ->
-            request_completed(Req, Reason),
+            request_completed(State, Req, Reason, 3),
             cleanup(State#fetch_state{outstanding_reqs = O - 1})
     after 10000 ->
       error_logger:info_msg("Stuck in cleanup! 10 seconds no completion!~n"),
@@ -124,7 +155,7 @@ finish(#fetch_state{outstanding_reqs=O}=State) when (O > 0) ->
     my_utils:rate_error_logger("Finish (~p)~n", O, ?RATE),
     receive
         {complete, Req, Reason} ->
-            request_completed(Req, Reason),
+            request_completed(State, Req, Reason, 3),
             finish(State#fetch_state{outstanding_reqs = O - 1})
     after 10000 ->
       error_logger:info_msg("Stuck in finish! 10 seconds no completion!~n"),
