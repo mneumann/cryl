@@ -44,13 +44,13 @@ class Cryl
           LinkFetcher.new(@storage_dir, log_file ? log_file % t : nil) do |fetcher|
             loop do
               break if stop
-              mutex.synchronize do
-                if !io.eof? and line = io.gets
-                  line.chomp!
-                  fetcher.fetch(line)
-                else
-                  stop = true
-                end
+              line = nil
+              mutex.synchronize { line = io.gets unless io.eof? }
+              if line
+                line.chomp!
+                fetcher.fetch(line)
+              else
+                stop = true
               end
             end
             log("#{t} ready to stop")
@@ -68,7 +68,7 @@ class Cryl
   def aggregate(urls_in, urls_out, urls_rej)
     while url = urls_in.gets
       url.chomp!
-      if digest = digest_url(url)
+      if digest = Cryl.digest_url(url)
         base = File.join(@storage_dir, digest)
         fn = base + ".data"
         if File.exist?(fn)
@@ -84,6 +84,7 @@ class Cryl
           end
         elsif not File.exist?(base + ".url")
           log("possibly wrong digest_url: #{fn}, #{url}")
+        else
         end
       else
         log("invalid URL: #{url}")
@@ -149,7 +150,7 @@ class Cryl
     list.join("/")
   end
 
-  def digest_url(url)
+  def self.digest_url(url)
     if url =~ /^http:\/\/([^\/]+)(.*)$/
       host_port, req_uri = $1.downcase, $2
       host, port = host_port.split(":", 2)
