@@ -29,10 +29,22 @@ request_completed(State, Req, Reason, Retries) ->
           C = Req#request.callback,
           C(Req);
       {redirect, Location} ->
-          spawn(fun() -> sync_post_request(State, Location, Req, Retries) end);
+          spawn(fun() -> sync_post_request(State, redirect_url(Req, Location), Req, Retries) end);
       _ ->
         fail
   end. 
+
+redirect_url(Req, Location) ->
+  case Location of
+      ("/" ++ _) ->
+          "http://" ++ Req#request.host ++ Location;
+      ("http://" ++ _) ->
+          Location;
+      _ ->
+      %    %% FIXME: is this really a relative URL?
+          "http://" ++ Req#request.host ++ "/" ++ Location
+      %     "http://" ++ Location
+  end.
 
 sync_post_request(State, URL, Req, Retries) ->
   N = fun(NewReq) ->
